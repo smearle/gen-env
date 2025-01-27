@@ -1,5 +1,5 @@
 import copy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from functools import partial
 import math
@@ -18,7 +18,7 @@ from jax import numpy as jnp
 import numpy as np
 from PIL import ImageFont, ImageDraw, Image
 
-from gen_env.configs.config import GenEnvConfig
+from gen_env.configs.config import EvoConfig
 from gen_env.events import Event, EventGraph
 from gen_env.objects import ObjectType
 from gen_env.rules import Rule, RuleData, RuleSet
@@ -36,6 +36,7 @@ class GameDef:
     rules: RuleSet
     player_placeable_tiles: list
     search_tiles: Iterable[TileType]
+    impassable_tiles: Iterable[TileType] = field(default_factory=lambda: [])
     map: Optional[np.ndarray] = None
     done_at_reward: Optional[int] = None
 
@@ -46,6 +47,7 @@ class GenEnvParams:
     rule_dones: chex.Array
     map: chex.Array
     player_placeable_tiles: chex.Array
+    impassable_tiles: chex.Array
 
     env_idx: Optional[int] = None
     noop_ep_rew: Optional[int] = None
@@ -80,6 +82,7 @@ class GenEnvObs:
 class PlayEnv(gym.Env):
     placement_positions = np.array([[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]])
     tile_size = 32
+    N_MOVE_ACTIONS = 4
     
     def __init__(self, width: int, height: int,
             game_def: GameDef,
@@ -92,7 +95,7 @@ class PlayEnv(gym.Env):
             variables: Iterable[Variable] = [],
             done_at_reward: int = None,
             max_episode_steps: int = 100,
-            cfg: GenEnvConfig = None,
+            cfg: EvoConfig = None,
         ):
         """_summary_
 
@@ -161,7 +164,7 @@ class PlayEnv(gym.Env):
         # No rotation
         # self.action_space = spaces.Discrete(4)
         # Rotation
-        N_ACTIONS = 5
+        N_ACTIONS = PlayEnv.N_MOVE_ACTIONS + len(player_placeable_tiles)
         self.action_space = spaces.Discrete(N_ACTIONS)
         self.num_actions = N_ACTIONS
         self.build_hist: list = []
@@ -405,7 +408,10 @@ class PlayEnv(gym.Env):
         #     new_pos,
         #     player_pos,
         # )
-        player_pos = new_pos
+
+        new_tile = new_map[:, new_pos[0], new_pos[1]]
+        is_passable = jnp.logical_not(jnp.any(new_tile * params.impassable_tiles))
+        player_pos = jax.lax.select(is_passable, new_pos, player_pos)
 
         # Actually print the values in the jax array
         # print(f"player_pos: {player_pos}")
@@ -413,10 +419,11 @@ class PlayEnv(gym.Env):
         # print(f"player_pos: {player_pos[0]}, {player_pos[1]}")
 
         # Hackish way
-        n_prev = 4
-        trg_pos = player_pos + self._rot_dirs[player_rot][0]
-        trg_pos = trg_pos % jnp.array(state.map.shape[1:])
-        new_map = new_map.at[params.player_placeable_tiles[jnp.int16(action) - n_prev], trg_pos[0], trg_pos[1]].set(place_tile)
+        n_prev = PlayEnv.N_MOVE_ACTIONS
+        if len(params.player_placeable_tiles) > 0:
+            trg_pos = player_pos + self._rot_dirs[player_rot][0]
+            trg_pos = trg_pos % jnp.array(state.map.shape[1:])
+            new_map = new_map.at[params.player_placeable_tiles[jnp.int16(action) - n_prev], trg_pos[0], trg_pos[1]].set(place_tile)
 
         new_map = new_map.at[self.player_idx, player_pos[0], player_pos[1]].set(1)
         state = state.replace(player_rot=player_rot, player_pos=player_pos,
@@ -432,7 +439,7 @@ class PlayEnv(gym.Env):
         # }
         map_obs = self.observe_map(state.map, state.player_pos)
         if self.cfg.obs_rew_norm:
-            rew_norm_obs = jnp.array([params.rew_bias / self.max_episode_steps, params.rew_scale])
+            rew_norm_obs = jnp.array([params.rew_bias / self.max_episode_steps, params.rew_scale]).flatten()
         else:
             rew_norm_obs = jnp.zeros((2,))
         flat_obs = jnp.concatenate((

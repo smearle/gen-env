@@ -2,23 +2,26 @@ defaults:
   - base_config
   - _self_
 
-  - override hydra/launcher: basic
+  # - override hydra/launcher: basic
   # - override hydra/launcher: submitit_local
-  # - override hydra/launcher: submitit_slurm
+  - override hydra/launcher: submitit_slurm
 
+
+mutate_map: false
 
 hydra:
-  # launcher:
-  #   tasks_per_node: 1
-  #   cpus_per_task: 1
-  #   gpus_per_node: 1
-  #   timeout_min: 2880
-  #   mem_gb: 30
+  launcher:
+    tasks_per_node: 1
+    cpus_per_task: 1
+    gpus_per_node: 1
+    timeout_min: 2880
+    mem_gb: 30
+    account: pr_174_tandon_advanced
 
   sweeper:
     params:
       # env_exp_id: 14, 15, 16
-      env_exp_id: 14
+      env_exp_id: 0
       # evo_seed: 0
       evo_seed: 0, 1, 2, 3, 4, 5
       # evo_seed: 3, 4, 5

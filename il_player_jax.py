@@ -25,7 +25,7 @@ import optax
 from tensorboardX import SummaryWriter
 import tqdm
 
-from gen_env.configs.config import GenEnvConfig, ILConfig
+from gen_env.configs.config import EvoConfig, ILConfig
 from gen_env.envs.gen_env import GenEnv
 from gen_env.envs.play_env import PlayEnv
 from gen_env.utils import init_base_env, init_config

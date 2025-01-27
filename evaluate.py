@@ -58,7 +58,7 @@ def render_elite_nn(env_params, env, apply_fn, network_params, n_eps=100):
     return states
 
     
-def eval_elite_nn(env_params, env, apply_fn, network_params, n_eps=100):
+def eval_nn(env_params, env, apply_fn, network_params, n_eps=100):
     rng = jax.random.PRNGKey(0)  # we can get away with this here
     _step_env_nn = partial(step_env_nn, env=env, network_params=network_params, apply_fn=apply_fn, env_params=env_params)
     obs, state = env.reset(rng, env_params) 
@@ -67,7 +67,7 @@ def eval_elite_nn(env_params, env, apply_fn, network_params, n_eps=100):
     return ep_reward
 
 
-def eval_elite_noop(params, env):
+def eval_noop(params, env):
     rng = jax.random.PRNGKey(0)  # inconsequential
     _step_env_noop = partial(step_env_noop, env=env)
     obs, state = env.reset(rng, params) 
@@ -76,19 +76,19 @@ def eval_elite_noop(params, env):
     return ep_reward
 
 
-def eval_elite_random(params, env, n_eps=100):
+def eval_random(params, env, n_eps=100):
     rng = jax.random.PRNGKey(0)  # inconsequential
     _step_env_random = partial(step_env_random, env=env)
     obs, state = env.reset(rng, params) 
-    _, rewards = jax.lax.scan(_step_env_random, (obs, state, params), None, env.max_episode_steps * n_eps)
+    (_, states, _), rewards = jax.lax.scan(_step_env_random, (obs, state, params), None, env.max_episode_steps * n_eps)
     ep_reward_mean = rewards.mean()
     ep_reward_std = rewards.std()
     ep_reward_max = rewards.max()
-    return ep_reward_mean, ep_reward_std, ep_reward_max
+    return states, ep_reward_mean, ep_reward_std, ep_reward_max
 
 
 def eval_nn(cfg: ILConfig, latest_gen: int, env, apply_fn, network_params, algo):
-    _eval_elite_nn = partial(eval_elite_nn, env=env, apply_fn=apply_fn, network_params={'params': network_params})
+    _eval_elite_nn = partial(eval_nn, env=env, apply_fn=apply_fn, network_params={'params': network_params})
 
     log_dir = getattr(cfg, f'_log_dir_{algo}')
 

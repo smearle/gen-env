@@ -25,13 +25,13 @@ from imitation.data import rollout
 from imitation.data.types import TransitionsMinimal
 from imitation.data.wrappers import RolloutInfoWrapper
 
-from gen_env.configs.config import GenEnvConfig
+from gen_env.configs.config import EvoConfig
 from gen_env.games import maze
 from gen_env.envs.play_env import PlayEnv
 from gen_env.utils import init_base_env, load_game_to_env, init_evo_config
 
 
-def evaluate_policy_on_elites(cfg: GenEnvConfig, policy, env, elites, name):
+def evaluate_policy_on_elites(cfg: EvoConfig, policy, env, elites, name):
     vid_dir = os.path.join(cfg._log_dir_il, "videos")
     if not os.path.exists(vid_dir):
         os.makedirs(vid_dir)
@@ -66,7 +66,7 @@ def evaluate_policy(cfg, policy, env: PlayEnv, individual):
     return total_reward, frames
 
 # TODO: Should maybe just be save/loading policy instead of entire trainer(?)
-def save(cfg: GenEnvConfig, bc_trainer: bc.BC, batch_i, epoch_i):
+def save(cfg: EvoConfig, bc_trainer: bc.BC, batch_i, epoch_i):
     policy_filepath = os.path.join(cfg._log_dir_il, "policy")
     logger_filepath = os.path.join(cfg._log_dir_il, "logger.pkl")
 
@@ -102,7 +102,7 @@ def save(cfg: GenEnvConfig, bc_trainer: bc.BC, batch_i, epoch_i):
     # if os.path.exists(policy_filepath + ".bak"):
     #     os.remove(policy_filepath + ".bak")
 
-def load(cfg: GenEnvConfig, policy_path: str):
+def load(cfg: EvoConfig, policy_path: str):
     # Load transitions and bc_trainer
     # bc_trainer = pickle.load(open(os.path.join(cfg.log_dir, "bc_trainer.pkl"), "rb"))
     # bc_trainer._bc_logger._logger = pickle.load(open(os.path.join(cfg.log_dir, "logger.pkl"), "rb"))
@@ -119,7 +119,7 @@ def load(cfg: GenEnvConfig, policy_path: str):
 
 
 @hydra.main(version_base="1.3", config_path="gen_env/configs", config_name="il")
-def main(cfg: GenEnvConfig):
+def main(cfg: EvoConfig):
     init_evo_config(cfg)
 
     # glob files of form `gen-XX*elites.npz` and get highest gen number
@@ -259,7 +259,7 @@ def main(cfg: GenEnvConfig):
         save(cfg, bc_trainer, batch_i, epoch_i)
 
     def on_batch_end(bc_trainer: imitation.algorithms.bc.BC,
-                    cfg: GenEnvConfig, base_n_batch, base_n_epoch, env, val_elites, writer):
+                    cfg: EvoConfig, base_n_batch, base_n_epoch, env, val_elites, writer):
         batch_i = base_n_batch + bc_trainer._bc_logger._current_batch
         epoch_i = base_n_epoch + bc_trainer._bc_logger._current_epoch
         if batch_i % (cfg.save_freq) == 0:

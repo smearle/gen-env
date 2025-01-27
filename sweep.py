@@ -39,13 +39,15 @@ class HyperParamsIL:
 
 @dataclass
 class HyperParamsRL:
-    rl_seed: int = (0, 1, 2)
+    # rl_seed: int = (0, 1, 2)
+    rl_seed: int = (3, 4, 5)
     # load_gen: Tuple[int] = (5, 10, 50, 100, 136)
     load_gen: Tuple[int] = (100,)
     # load_il: Tuple[bool] = (True, False)
     load_il: Tuple[bool] = (False,)
     # evo_freq: Tuple[int] = (-1, 1, 10)
     evo_freq: Tuple[int] = (-1,)
+    n_evo_gens: Tuple[int] = (1,)
     # n_train_envs: Tuple[int] = (1, 10, 50, 100, -1)
     n_train_envs: Tuple[int] = (-1,)
     # obs_window: Tuple[int] = (5, 10, 20, -1)
@@ -82,11 +84,15 @@ rl_sweeps = {
         load_il=(True, False),
     ),
     'evo': HyperParamsRL(
-        evo_freq=(-1, 1, 10),
-        total_timesteps=1e9,
+        # evo_freq=(-1, 1, 10),
+        evo_freq=(1, 10),
+        n_evo_gens=(1, 5, 10),
+        total_timesteps=(1e9,),
     ),
-    'n_envs': HyperParamsIL(
+    'n_envs': HyperParamsRL(
+        load_gen=(0,),
         n_train_envs=(1, 10, 50, 100, -1),
+        total_timesteps=(1e9,)
     ),
 }
 
@@ -107,7 +113,7 @@ def main(cfg: SweepConfig):
         if cfg.algo == 'il':
             e_cfg = ILConfig(
                 **h,
-                env_exp_id=14,
+                env_exp_id=0,
                 save_freq=10_000,
                 eval_freq=10_000,
                 il_max_steps=100_000,
@@ -116,7 +122,7 @@ def main(cfg: SweepConfig):
         elif cfg.algo == 'rl':
             e_cfg = RLConfig(
                 **h,
-                env_exp_id=14,
+                env_exp_id=0,
                 # overwrite=True,
                 # total_timesteps=100_000_000,
         )
@@ -162,13 +168,14 @@ def main(cfg: SweepConfig):
         print('Submitting jobs to SLURM cluster.')
         executor = submitit.AutoExecutor(folder=f'submitit_logs_{cfg.algo}')
         executor.update_parameters(
-                job_name=f"{cfg.algo}_{cfg.mode}_{sweep_name}",
+                slurm_job_name=f"{cfg.algo}_{cfg.mode}_{sweep_name}",
                 mem_gb=30,
                 tasks_per_node=1,
                 cpus_per_task=1,
                 # gpus_per_node=1,
                 timeout_min=2880,
                 slurm_gres='gpu:1',
+                slurm_account='pr_174_general',
             )
         executor.map_array(main_fn, sweep_cfgs)
 

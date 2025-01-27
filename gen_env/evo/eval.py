@@ -6,7 +6,7 @@ import numpy as np
 
 from gen_env.envs.play_env import GenEnvParams, PlayEnv
 from gen_env.evo.individual import IndividualData
-from search_agent import batched_bfs, bfs, bfs_multi_env
+from search_agent import batched_bfs, bfs, bfs_multi_env, bfs_multi_env_nohash
 
 def evaluate_multi(args):
     return evaluate(*args)
@@ -25,7 +25,7 @@ def evaluate_multi(key: jax.random.PRNGKey, env: PlayEnv, env_params: GenEnvPara
     # obs, init_state = env.reset(key=key, params=env_params)
     _, init_state = jax.vmap(env.reset, in_axes=(0, 0))(jax.random.split(key, n_envs), env_params)
     best_action_seqs, best_rewards, n_iter_bests, n_iter = \
-        bfs_multi_env(env, init_state, env_params, max_steps=trg_n_iter, n_best_to_keep=1)
+        bfs_multi_env_nohash(env, init_state, env_params, max_steps=trg_n_iter, n_best_to_keep=1)
     best_state_actions, best_reward, n_iter_best = best_action_seqs[0], best_rewards[0], n_iter_bests[0]
     action_seq = None
     # if best_state_actions is not None:

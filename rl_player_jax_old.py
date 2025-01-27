@@ -16,7 +16,7 @@ from flax.training import orbax_utils
 import orbax
 from tensorboardX import SummaryWriter
 
-from gen_env.configs.config import RLConfig, TrainConfig, GenEnvConfig
+from gen_env.configs.config import RLConfig, TrainConfig, EvoConfig
 from gen_env.utils import init_base_env
 from purejaxrl.experimental.s5.wrappers import LogWrapper
 from pcgrl_utils import (get_rl_ckpt_dir, get_exp_dir, get_network,
@@ -578,7 +578,7 @@ def init_checkpointer(config: RLConfig):
     
 
 @hydra.main(version_base=None, config_path='gen_env/configs', config_name='train')
-def main(config: GenEnvConfig):
+def main(config: EvoConfig):
     config = init_config(config, evo=False)
     rng = jax.random.PRNGKey(config.seed)
 

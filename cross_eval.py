@@ -6,14 +6,16 @@ import json
 import os
 from typing import Iterable
 
-from gen_env.configs.config import GenEnvConfig, ILConfig, SweepConfig
+from gen_env.configs.config import EvoConfig, ILConfig, SweepConfig
 from gen_env.utils import init_config
 import hydra
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from tensorboard.backend.event_processing import event_accumulator
 import yaml
 
+from plot import load_tensorboard_logs
 from utils import init_il_config, init_rl_config
 
 # from utils import get_sweep_conf_path, init_config, load_sweep_hypers, write_sweep_confs
@@ -140,7 +142,7 @@ def cross_eval_basic(name: str, sweep_configs: Iterable[SweepConfig], hypers, ev
         log_dir_attr = '_log_dir_il'
     else:
         log_dir_attr = '_log_dir_rl'
-    _metrics_to_keep = ['train_mean', 'test_mean']
+    _metrics_to_keep = ['train_mean', 'val_mean', 'test_mean']
 
     # Save the eval hypers to the cross_eval directory, so that we know of any special eval hyperparameters that were
     # applied during eval.
@@ -193,6 +195,12 @@ def cross_eval_basic(name: str, sweep_configs: Iterable[SweepConfig], hypers, ev
             sc_stats = json.load(open(
                 os.path.join(f'{sc_log_dir}', 
                             'nn_stats.json')))
+            # HACK to combine val and test sets
+            test_returns = sc_stats['val_returns'] + sc_stats['test_returns']
+            sc_stats.pop('val_mean')
+            sc_stats['test_mean'] = np.mean(test_returns)
+            # END HACK
+
             [sc_stats.pop(k) for k in stats_to_exclude]
             for k, v in sc_stats.items():
                 col_tpl = copy.deepcopy(sec_col_tpl)
@@ -367,6 +375,27 @@ def cross_eval_misc(name: str, sweep_configs: Iterable[SweepConfig], hypers, alg
     csv_paths = glob.glob(os.path.join(getattr(dummy_cfg, log_dir_attr), '*.csv'))
     key_names = [csv_path.split(os.sep)[-1].removesuffix('.csv') for csv_path in csv_paths]
     breakpoint()
+    # csv_paths = glob.glob(os.path.join(getattr(dummy_cfg, log_dir_attr), '*.csv'))
+    # key_names = [csv_path.split(os.sep)[-1].removesuffix('.csv') for csv_path in csv_paths]
+
+    # Load all tensorboard log files
+    
+    event_files = []
+    # Assuming all keys will be present in the first experiment (fingers crossed)
+    for sc in sweep_configs[0:1]:
+        log_dir = getattr(sc, log_dir_attr)
+        event_files.extend(glob.glob(os.path.join(log_dir, "events.out.tfevents.*")))
+    
+    key_names = set()
+    for event_file in event_files:
+        ea = event_accumulator.EventAccumulator(event_file)
+        ea.Reload()
+        key_names.update(ea.scalars.Keys())
+
+    exp_logs = [load_tensorboard_logs(getattr(sc, log_dir_attr), key_names) for sc in sweep_configs]
+    
+    key_names = list(key_names)
+
     stat_name_to_row_vals_curves = {}
     stat_name_to_all_timesteps = {}
 
@@ -387,7 +416,7 @@ def cross_eval_misc(name: str, sweep_configs: Iterable[SweepConfig], hypers, alg
         return interpolated_returns
 
 
-    for key_name in key_names:
+    for k_i, key_name in enumerate(key_names):
         # Create a list of lists to show curves of metrics (e.g. reward) over the 
         # course of training (i.e. as would be logged by tensorboard)
         row_indices = []
@@ -395,22 +424,24 @@ def cross_eval_misc(name: str, sweep_configs: Iterable[SweepConfig], hypers, alg
         all_timesteps = []
         step_col_name = 'steps'
 
-        for sc in sweep_configs:
+        for sc_i, sc in enumerate(sweep_configs):
             sc: ILConfig
             exp_dir = getattr(sc, log_dir_attr)
             # exp_dir = sc._log_dir_il
             # Load the `progress.csv`
-            csv_path = os.path.join(exp_dir, f'{key_name}.csv')
-            if not os.path.isfile(csv_path):
-                continue
-            train_metrics = pd.read_csv(csv_path, index_col=0)
-            train_metrics = train_metrics.sort_values(by=step_col_name, ascending=True)
+
+            stepss, valss = exp_logs[sc_i]
+            steps, vals = stepss[k_i], valss[k_i]
+
+            # train_metrics = pd.read_csv(csv_path, index_col=0)
+            # train_metrics = train_metrics.sort_values(by=step_col_name, ascending=True)
 
             # misc_stats_path = os.path.join(exp_dir, 'misc_stats.json')
             # if os.path.exists(misc_stats_path):
             #     sc_stats = json.load(open(f'{exp_dir}/misc_stats.json'))
             # else:
-            max_timestep = train_metrics[step_col_name].max()
+            # max_timestep = train_metrics[step_col_name].max()
+            max_timestep = steps[-1]
             # sc_stats = {'n_timesteps_trained': max_timestep}
 
             row_tpl = tuple(getattr(sc, k) for k in row_headers)
@@ -423,10 +454,8 @@ def cross_eval_misc(name: str, sweep_configs: Iterable[SweepConfig], hypers, alg
 
             # row_vals.append(vals)
             
-            ep_returns = train_metrics[key_name]
-            row_vals_curves.append(ep_returns)
-            sc_timesteps = train_metrics[step_col_name]
-            all_timesteps.append(sc_timesteps)
+            row_vals_curves.append(vals)
+            all_timesteps.append(steps)
 
         all_unique_timesteps = np.sort(np.unique(np.concatenate(all_timesteps)))
 
@@ -509,8 +538,10 @@ def cross_eval_misc(name: str, sweep_configs: Iterable[SweepConfig], hypers, alg
 
         legend_title = ', '.join(levels_to_keep).replace('_', ' ')
         ax.legend(title=legend_title)
-        plt.savefig(os.path.join(CROSS_EVAL_DIR, name, f"{key_name}_metric_curves_mean.png"))
-        print(f"Saved plot to {os.path.join(CROSS_EVAL_DIR, name, f'{key_name}_metric_curves_mean.png')}")
+        fig_path = os.path.join(CROSS_EVAL_DIR, name, f"{key_name}_metric_curves_mean.png")
+        os.makedirs(os.path.pardir(fig_path), exist_ok=True)
+        plt.savefig(fig_path)
+        print(f"Saved plot to {os.path.join(CROSS_EVAL_DIR, name, fig_path)}")
 
 
     # Save the dataframe to a csv
@@ -596,10 +627,10 @@ def cross_eval_rl(cfg: SweepConfig, sweep_cfgs: Iterable[SweepConfig], hypers):
     sweep_cfgs = _sweep_cfgs
     init_cross_eval_config(cfg, sweep_cfgs)
     cross_eval_basic(name=cfg.name, sweep_configs=sweep_cfgs, hypers=hypers, algo='rl')
-    cross_eval_misc(name=cfg.name, sweep_configs=sweep_cfgs, hypers=hypers)
+    cross_eval_misc(name=cfg.name, sweep_configs=sweep_cfgs, hypers=hypers, algo='rl')
 
     
-def init_cross_eval_config(cfg: SweepConfig, sweep_cfgs: Iterable[GenEnvConfig]):
+def init_cross_eval_config(cfg: SweepConfig, sweep_cfgs: Iterable[EvoConfig]):
     # Note that we call this after initializing per-experiment directory names
     # Here we are just renaming for the sake of cross-eval tables/plots
     cfg.name = f'{cfg.algo}_{cfg.name}'

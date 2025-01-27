@@ -11,16 +11,17 @@ from jax import numpy as jnp
 import jax
 import numpy as np
 
-from gen_env.configs.config import GenEnvConfig
+from gen_env.configs.config import EvoConfig
 from gen_env.envs.play_env import GameDef, PlayEnv, SB3PlayEnv, GenEnvParams
 from gen_env.evo.individual import IndividualData
 from gen_env.games import GAMES
 from gen_env.rules import RuleData, compile_rule, gen_rand_rule
+from utils import stack_leaves
 
 
-def init_config(cfg: GenEnvConfig):
+def init_config(cfg: EvoConfig):
     env_exp_name = (f"{cfg.game}_{'mutRule_' if cfg.mutate_rules else ''}{'mutMap_' if cfg.mutate_map else ''}" + 
-        (f's-{cfg.evo_seed}_' if cfg.evo_seed != 0 else '') + f"exp-{cfg.env_exp_id}")
+        f's-{cfg.evo_seed}_' + f"exp-{cfg.env_exp_id}")
 
     # Get path to parent directory of this file
     grandparent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -62,7 +63,13 @@ def save_video(frames, video_path, fps=10):
     imageio.mimwrite(video_path, frames, fps=25, quality=8, macro_block_size=1)
 
 
-def gen_random_map(key: jax.random.PRNGKey, game_def: GameDef, map_shape):
+def gen_random_multihot_map(key: jax.random.PRNGKey, game_def: GameDef, map_shape):
+    """Create random multi-hot map with uniform probability"""
+    new_map = jax.random.bernouilli(map_shape)
+    return new_map
+
+
+def gen_random_int_map(key: jax.random.PRNGKey, game_def: GameDef, map_shape):
     """Generate frequency-based tiles with certain probabilities."""
     tile_probs = [tile.prob for tile in game_def.tiles]
     # int_map = np.random.choice(len(game_def.tiles), size=map_shape, p=tile_probs)
@@ -98,7 +105,7 @@ def map_to_onehot(int_map: np.ndarray, game_def: GameDef):
     return map_arr.astype(jnp.int16)
 
 
-def init_base_env(cfg: GenEnvConfig, sb3=False) -> Tuple[PlayEnv, GenEnvParams]:
+def init_base_env(cfg: EvoConfig, sb3=False) -> Tuple[PlayEnv, GenEnvParams]:
     game_def: GameDef = GAMES[cfg.game].make_env()
     if game_def.map is not None and len(np.array(game_def.map).shape) == 3:
         all_params = []
@@ -108,24 +115,19 @@ def init_base_env(cfg: GenEnvConfig, sb3=False) -> Tuple[PlayEnv, GenEnvParams]:
             env, params = init_base_env_single(cfg, game_def, sb3)
             all_params.append(params)
         # Stack all params
-        all_params = GenEnvParams(
-            rules=jnp.stack([params.rules for params in all_params]),
-            map=jnp.stack([params.map for params in all_params]),
-            rule_dones=jnp.stack([params.rule_dones for params in all_params]),
-            player_placeable_tiles=all_params[0].player_placeable_tiles,
-        )
+        all_params = stack_leaves(all_params)
         return env, all_params
     else:
         return init_base_env_single(cfg, game_def, sb3)
             
 
-def init_base_env_single(cfg: GenEnvConfig, game_def: GameDef, sb3=False) -> Tuple[PlayEnv, GenEnvParams]:
+def init_base_env_single(cfg: EvoConfig, game_def: GameDef, sb3=False) -> Tuple[PlayEnv, GenEnvParams]:
     for rule in game_def.rules:
         rule.n_tile_types = len(game_def.tiles)
         rule = compile_rule(rule)
     if game_def.map is None:
         key = jax.random.PRNGKey(cfg.seed)
-        map_arr = gen_random_map(key, game_def, cfg.map_shape).astype(jnp.int16)
+        map_arr = gen_random_int_map(key, game_def, cfg.map_shape).astype(jnp.int16)
     else:
         map_arr = map_to_onehot(game_def.map, game_def)
         map_arr = map_arr.astype(jnp.int16)
@@ -146,9 +148,16 @@ def init_base_env_single(cfg: GenEnvConfig, game_def: GameDef, sb3=False) -> Tup
     rule_dones = jnp.array([rule.done for rule in game_def.rules], dtype=bool)
     player_placeable_tiles = \
         jnp.array([tile.idx for tile, placement_rule in game_def.player_placeable_tiles], dtype=int)
+    if len(game_def.impassable_tiles) == 0:
+        impassable_tiles = jnp.zeros((len(game_def.tiles),), dtype=bool)
+    else:
+        impassable_tiles = jnp.array([tile.idx for tile in game_def.impassable_tiles], dtype=int)
+        impassable_tiles = jnp.eye(len(game_def.tiles), dtype=bool)[impassable_tiles].sum(axis=0)
     params = GenEnvParams(rules=rules, map=map_arr,
-                       rule_dones=rule_dones,
-                       player_placeable_tiles=player_placeable_tiles)
+                        rule_dones=rule_dones,
+                        player_placeable_tiles=player_placeable_tiles,
+                        impassable_tiles=impassable_tiles,
+                    )
     if not sb3:
         env = PlayEnv(
             cfg=cfg, height=cfg.map_shape[0], width=cfg.map_shape[1],
@@ -168,19 +177,21 @@ def init_base_env_single(cfg: GenEnvConfig, game_def: GameDef, sb3=False) -> Tup
     return env, params
 
 
-def gen_rand_env_params(cfg: GenEnvConfig, rng: jax.random.PRNGKey, game_def, rules: RuleData) -> GenEnvParams:
-    rand_rule = gen_rand_rule(rng, rules)
-    rule_rewards = jax.random.randint(rng, (len(game_def.rules),), minval=-1, maxval=2, dtype=jnp.int32)
-    rules = RuleData(rule=rand_rule, reward=rule_rewards)
+def gen_rand_env_params(cfg: EvoConfig, rng: jax.random.PRNGKey, base_params: GenEnvParams, game_def: GameDef) \
+        -> GenEnvParams:
+    params = base_params
+    if cfg.mutate_rules:
+        rand_rules = gen_rand_rule(rng, base_params.rules.rule)
+        # Generate random rewards per rule, in [-1, 1]
+        rule_rewards = jax.random.randint(rng, (len(base_params.rules.reward),), minval=-1, maxval=2, dtype=jnp.int32)
+        rules = RuleData(rule=rand_rules, reward=rule_rewards)
+        # Make rules random
+        rule_dones = jnp.zeros((len(base_params.rules.reward),), dtype=bool)
+        params = params.replace(rules=rules, rule_dones=rule_dones)
 
-    map_arr = gen_random_map(rng, game_def, cfg.map_shape).astype(jnp.int16)
-    # Make rules random
-    rule_dones = jnp.zeros((len(game_def.rules),), dtype=bool)
-    player_placeable_tiles = \
-        jnp.array([tile.idx for tile, placement_rule in game_def.player_placeable_tiles], dtype=int)
-    params = GenEnvParams(rules=rules, map=map_arr,
-                          rule_dones=rule_dones,
-                          player_placeable_tiles=player_placeable_tiles)
+    if cfg.mutate_map:
+        map_arr = gen_random_int_map(rng, game_def, cfg.map_shape).astype(jnp.int16)
+        params = params.replace(map=map_arr)
     return params
 
 # def load_game_to_env(env: PlayEnv, individual: IndividualData):

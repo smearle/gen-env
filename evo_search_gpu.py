@@ -22,7 +22,7 @@ import numpy as np
 from multiprocessing import Pool
 from tensorboardX import SummaryWriter
 
-from gen_env.configs.config import GenEnvConfig
+from gen_env.configs.config import EvoConfig
 from gen_env.games import GAMES
 from gen_env.envs.play_env import GenEnvParams, PlayEnv
 from gen_env.evo.eval import evaluate_multi, evaluate
@@ -43,7 +43,7 @@ class Playtrace:
     done_seq: chex.Array
 
 
-def collect_elites(cfg: GenEnvConfig, max_episode_steps: int):
+def collect_elites(cfg: EvoConfig, max_episode_steps: int):
 
     # If overwriting, or elites have not previously been aggregated, then collect all unique games.
     # if cfg.overwrite or not os.path.isfile(unique_elites_path):
@@ -157,7 +157,7 @@ def collect_elites(cfg: GenEnvConfig, max_episode_steps: int):
     # Additionally save elites to workspace directory for easy access for imitation learning
     # np.savez(unique_elites_path, elites)
 
-def split_elites(cfg: GenEnvConfig, playtraces: Playtrace):
+def split_elites(cfg: EvoConfig, playtraces: Playtrace):
     """ Split elites into train, val and test sets."""
     # playtraces.sort(key=lambda x: x.fitness, reverse=True)
     # Sort 
@@ -202,7 +202,7 @@ def split_elites(cfg: GenEnvConfig, playtraces: Playtrace):
     return train_elites, val_elites, test_elites
 
 
-def replay_episode_jax(cfg: GenEnvConfig, env: PlayEnv, elite: IndividualData, 
+def replay_episode_jax(cfg: EvoConfig, env: PlayEnv, elite: IndividualData, 
                    record: bool = False, best_i: int = 0):
     """Re-play the episode, recording observations and rewards (for imitation learning)."""
     # FIXME: This is super slow! Maybe better to do a scan over max_episode_steps, then slice away invalid moves?
@@ -263,7 +263,7 @@ def replay_episode_jax(cfg: GenEnvConfig, env: PlayEnv, elite: IndividualData,
     return playtrace, None
 
 
-def replay_episode(cfg: GenEnvConfig, env: PlayEnv, elite: IndividualData, 
+def replay_episode(cfg: EvoConfig, env: PlayEnv, elite: IndividualData, 
                    record: bool = False, best_i: int = 0):
     """Re-play the episode, recording observations and rewards (for imitation learning)."""
     # print(f"Fitness: {elite.fitness}")
@@ -326,7 +326,7 @@ def replay_episode(cfg: GenEnvConfig, env: PlayEnv, elite: IndividualData,
 
 # def main(exp_id='0', overwrite=False, load=False, multi_proc=False, render=False):
 @hydra.main(version_base='1.3', config_path="gen_env/configs", config_name="evo")
-def main(cfg: GenEnvConfig):
+def main(cfg: EvoConfig):
     init_config(cfg)
     vid_dir = os.path.join(cfg._log_dir_evo, 'videos')
     
@@ -408,14 +408,6 @@ def main(cfg: GenEnvConfig):
         eval_elites(cfg, env, elite_inds, n_gen=n_gen, vid_dir=vid_dir)
         return
 
-    def multiproc_eval_offspring(offspring):
-        eval_offspring = []
-        while len(offspring) > 0:
-            envs = [env for _ in range(len(offspring))]
-            eval_offspring += pool.map(evaluate_multi, [(key, env, ind, render, trg_n_iter) for env, ind in zip(envs, offspring)])
-            offspring = offspring[cfg.n_proc:]
-        return eval_offspring
-
     fixed_tile_nums = np.array([t.num if t.num is not None else -1 for t in env.tiles])
 
     game_def = GAMES[cfg.game].make_env()
@@ -443,7 +435,7 @@ def main(cfg: GenEnvConfig):
         # Generate offspring params using vmap
         rng_o = jax.random.split(key, pop_size)
         offspring_params = jax.vmap(gen_rand_env_params, in_axes=(None, 0, None, None))(
-            cfg, rng_o, game_def, rules
+            cfg, rng_o, base_params, game_def
         )
         fitnesses, action_seqs = evaluate_multi(key, env, offspring_params, trg_n_iter, pop_size)
         fitnesses, action_seqs = fitnesses[:, 0], action_seqs[:, 0]
@@ -464,19 +456,6 @@ def main(cfg: GenEnvConfig):
     writer = SummaryWriter(log_dir=cfg._log_dir_evo)
     for n_gen in range(n_gen, 10000):
         start_time = timer()
-        # parents = np.random.choice(elite_inds, size=cfg.batch_size, replace=True)
-        # parents = np.random.choice(elite_inds, size=cfg.evo_pop_size, replace=True)
-        # offspring_inds = []
-        # if n_proc == 1:
-        #     for p_ind in parents:
-        #         p_params = p_ind.env_params
-        #         # o: Individual = copy.deepcopy(p)
-        #         key, _ = jax.random.split(key)
-        #         map, rules = ind.mutate(key, p_params.map, p_params.rules, env.tiles)
-        #         o_params = p_params.replace(map=map, rules=rules)
-        #         fitnesses, action_seqs = evaluate(key, env, o_params, render, trg_n_iter)
-        #         o_ind = IndividualData(env_params=o_params, fitnesses=fitnesses, action_seqs=action_seqs)
-        #         offspring_inds.append(o_ind)
         maps, rules = jax.vmap(ind.mutate, in_axes=(0, 0, 0, None))(
             jax.random.split(key, pop_size), elite_inds.env_params.map, elite_inds.env_params.rules, env.tiles
         )
@@ -539,7 +518,7 @@ def main(cfg: GenEnvConfig):
             eval_elites(cfg, env, elite_inds, n_gen=n_gen, vid_dir=vid_dir)
 
 
-def eval_elites(cfg: GenEnvConfig, env: PlayEnv, elites: Iterable[IndividualData], n_gen: int, vid_dir: str):
+def eval_elites(cfg: EvoConfig, env: PlayEnv, elites: Iterable[IndividualData], n_gen: int, vid_dir: str):
     """ Evaluate elites."""
     # Sort elites by fitness.
     idxs = jnp.argsort(elites.fitness)

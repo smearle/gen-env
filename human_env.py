@@ -6,7 +6,7 @@ import jax
 import numpy as np
 import pygame
 
-from gen_env.configs.config import GenEnvConfig
+from gen_env.configs.config import EvoConfig
 from gen_env.evo.individual import IndividualData
 from gen_env.utils import init_base_env
 from gen_env.envs.play_env import PlayEnv, Rule, TileType
@@ -14,7 +14,7 @@ from gen_env.games import *
 
 
 @hydra.main(config_path="gen_env/configs", config_name="human")
-def main(cfg: GenEnvConfig):
+def main(cfg: EvoConfig):
     game, map_shape = cfg.game, cfg.map_shape
     cfg.game = cfg.game
     if isinstance(game, str):

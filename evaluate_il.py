@@ -8,7 +8,7 @@ import hydra
 import jax
 import numpy as np
 
-from evaluate import eval_elite_nn, eval_nn, render_nn
+from evaluate import eval_nn, eval_nn, render_nn
 from gen_env.configs.config import ILConfig
 from gen_env.evo.individual import IndividualPlaytraceData
 from gen_env.utils import init_base_env, init_config

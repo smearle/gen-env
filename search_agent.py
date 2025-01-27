@@ -9,6 +9,7 @@ from typing import Iterable
 import chex
 from fire import Fire
 from flax import struct
+import hydra
 import gym
 import jax
 from jax import numpy as jnp
@@ -16,6 +17,7 @@ import numpy as np
 
 from gen_env.games import (hamilton, maze, maze_backtracker, maze_npc, power_line, sokoban)
 from gen_env.envs.play_env import GenEnvParams, GenEnvState, PlayEnv, Rule, TileType
+from gen_env.utils import init_base_env
 from utils import stack_leaves
 
 
@@ -315,10 +317,26 @@ def bfs_multi_env(env: PlayEnv, state: GenEnvState, params: GenEnvParams,
     else:
         raise NotImplementedError
 
+
+    def expand_frontier_env(frontier: FrontierState, params: GenEnvParams):
+        # vmapping over actions
+        f = jax.vmap(expand_frontier_action, in_axes=(None, None, None, 0))(env, frontier, params, possible_actions)
+        return f
+
+    def expand_frontier(frontier: FrontierState, params: GenEnvParams):
+        # vmapping over envs
+        return jax.vmap(expand_frontier_env, in_axes=(0, 0))(frontier, params)
+
+    _expand_frontier = jax.jit(
+        partial(expand_frontier, params=params)
+    )
+
     # while jnp.any(frontier) > 0:
     # while len(frontier_lst) > 0:
     while n_iter < max_steps:
+        print('expanding')
         n_iter += 1
+        print(n_iter)
         # if n_iter > max_steps:
         #     break
         # Find the idx of the best state in the frontier
@@ -328,18 +346,10 @@ def bfs_multi_env(env: PlayEnv, state: GenEnvState, params: GenEnvParams,
         # Now turn this into a single pytree
         frontier = stack_leaves(frontier)
 
-        def expand_frontier_env(frontier: FrontierState, params: GenEnvParams):
-            # vmapping over actions
-            f = jax.vmap(expand_frontier_action, in_axes=(None, None, None, 0))(env, frontier, params, possible_actions)
-            return f
-
-        def expand_frontier(frontier: FrontierState, params: GenEnvParams):
-            # vmapping over envs
-            return jax.vmap(expand_frontier_env, in_axes=(0, 0))(frontier, params)
-
         # (n_envs, n_expansions/actions, ...)
-        next_frontier = expand_frontier(frontier, params)
+        next_frontier = _expand_frontier(frontier)
 
+        print('hashing')
         next_frontier_lst = [[] for _ in range(n_envs)]
         for env_i in range(n_envs):
             visited_i = visited[env_i]
@@ -363,7 +373,7 @@ def bfs_multi_env(env: PlayEnv, state: GenEnvState, params: GenEnvParams,
         
                 next_frontier_lst[env_i].append(frontier_i)
 
-        
+        print('getting baest') 
         for env_i in range(n_envs):
             frontier_env_i = next_frontier_lst[env_i]
             for frontier_i in frontier_env_i:
@@ -394,7 +404,7 @@ def bfs_multi_env(env: PlayEnv, state: GenEnvState, params: GenEnvParams,
 
 
 # @partial(jax.jit, static_argnames=('env', 'max_steps', 'max_episode_steps', 'n_best_to_keep'))
-def bfs_multi_env_(env: PlayEnv, state: GenEnvState, params: GenEnvParams,
+def bfs_multi_env_nohash(env: PlayEnv, state: GenEnvState, params: GenEnvParams,
           max_steps: int = inf, max_episode_steps: int = 100, n_best_to_keep: int = 1):
     """Apply a search algorithm to find the sequence of player actions leading to the highest possible reward."""
     # print('Tracing bfs_multi_env')
@@ -424,6 +434,18 @@ def bfs_multi_env_(env: PlayEnv, state: GenEnvState, params: GenEnvParams,
     else:
         raise NotImplementedError
 
+
+    def expand_frontier_env(frontier: FrontierState, params: GenEnvParams):
+        # vmapping over actions
+        f = jax.vmap(expand_frontier_action, in_axes=(None, None, None, 0))(env, frontier, params, possible_actions)
+        return f
+
+    def expand_frontier(frontier: FrontierState, params: GenEnvParams):
+        # vmapping over envs
+        return jax.vmap(expand_frontier_env, in_axes=(0, 0))(frontier, params)
+
+    _expand_frontier = jax.jit(partial(expand_frontier, params=params))
+
     # while jnp.any(frontier) > 0:
     # while len(frontier_lst) > 0:
     while n_iter < max_steps:
@@ -435,19 +457,12 @@ def bfs_multi_env_(env: PlayEnv, state: GenEnvState, params: GenEnvParams,
 
         frontier = [frontier_lst[i].pop(j) for i, j in enumerate(best_idxs)]
         # Now turn this into a single pytree
+        print(len(frontier))
         frontier = stack_leaves(frontier)
 
-        def expand_frontier_env(frontier: FrontierState, params: GenEnvParams):
-            # vmapping over actions
-            f = jax.vmap(expand_frontier_action, in_axes=(None, None, None, 0))(env, frontier, params, possible_actions)
-            return f
-
-        def expand_frontier(frontier: FrontierState, params: GenEnvParams):
-            # vmapping over envs
-            return jax.vmap(expand_frontier_env, in_axes=(0, 0))(frontier, params)
-
         # (n_envs, n_expansions/actions, ...)
-        next_frontier = expand_frontier(frontier, params)
+        next_frontier = _expand_frontier(frontier)
+        breakpoint()
 
         next_frontier_lst = [[] for _ in range(n_envs)]
         for env_i in range(n_envs):
@@ -507,13 +522,18 @@ def hash(env: PlayEnv, state):
     return env.hashable(state)
 
 
-def main(game=maze, height=10, width=10, render=False):
+
+# def main(game=maze, height=10, width=10, render=False):
+@hydra.main(version_base="1.3", config_path="gen_env/configs", config_name='evo')
+def main(cfg):
     if isinstance(game, str):
         game = globals()[game]
 
-    env: PlayEnv = game.make_env(height=height, width=width)
+    # env: PlayEnv = game.make_env()
+    env, params = init_base_env(cfg)
+    obs, state = env.reset()
     while True:
-        sol = batched_bfs(env, render=render)
+        sol = batched_bfs(env, state=state, params=params, render=False)
 
 if __name__ == "__main__":
-    Fire(main)
+    main()

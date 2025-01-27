@@ -267,7 +267,7 @@ def _main(cfg: RLConfig):
     if cfg.load_gen is None and cfg.load_game is None:
         # In this case, we generate random (probably garbage) environments upon which to begin training.
         train_env_params = jax.vmap(gen_rand_env_params, in_axes=(None, 0, None, None))(
-            cfg, jax.random.split(rng, cfg.n_envs), env.game_def, env_params.rules)
+            cfg, jax.random.split(rng, cfg.n_envs), env_params, env.game_def)
             
     else:
         train_env_params = train_elites.env_params

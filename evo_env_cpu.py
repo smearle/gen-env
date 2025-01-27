@@ -18,7 +18,7 @@ import numpy as np
 from multiprocessing import Pool
 from torch.utils.tensorboard import SummaryWriter
 
-from gen_env.configs.config import GenEnvConfig
+from gen_env.configs.config import EvoConfig
 from gen_env.games import GAMES
 from gen_env.envs.play_env import PlayEnv
 from gen_env.evo.eval import evaluate_multi, evaluate
@@ -34,7 +34,7 @@ from gen_env.utils import init_base_env, load_game_to_env, init_evo_config
 #     action_seq: List[int]
 #     reward_seq: List[float]
 
-def collect_elites(cfg: GenEnvConfig):
+def collect_elites(cfg: EvoConfig):
 
     # If overwriting, or elites have not previously been aggregated, then collect all unique games.
     # if cfg.overwrite or not os.path.isfile(unique_elites_path):
@@ -98,7 +98,7 @@ def collect_elites(cfg: GenEnvConfig):
     # Additionally save elites to workspace directory for easy access for imitation learning
     # np.savez(unique_elites_path, elites)
 
-def split_elites(cfg: GenEnvConfig, elites: Iterable[IndividualData]):
+def split_elites(cfg: EvoConfig, elites: Iterable[IndividualData]):
     """ Split elites into train, val and test sets."""
     elites.sort(key=lambda x: x.fitness, reverse=True)
 
@@ -131,7 +131,7 @@ def split_elites(cfg: GenEnvConfig, elites: Iterable[IndividualData]):
     return train_elites, val_elites, test_elites
 
 
-def replay_episode(cfg: GenEnvConfig, env: PlayEnv, elite: IndividualData, 
+def replay_episode(cfg: EvoConfig, env: PlayEnv, elite: IndividualData, 
                    record: bool = False):
     """Re-play the episode, recording observations and rewards (for imitation learning)."""
     # print(f"Fitness: {elite.fitness}")
@@ -189,7 +189,7 @@ def replay_episode(cfg: GenEnvConfig, env: PlayEnv, elite: IndividualData,
 
 # def main(exp_id='0', overwrite=False, load=False, multi_proc=False, render=False):
 @hydra.main(version_base='1.3', config_path="gen_env/configs", config_name="evo")
-def main(cfg: GenEnvConfig):
+def main(cfg: EvoConfig):
     init_evo_config(cfg)
     vid_dir = os.path.join(cfg._log_dir_evo, 'videos')
     
@@ -363,7 +363,7 @@ def main(cfg: GenEnvConfig):
         if n_gen % cfg.eval_freq == 0:
             eval_elites(cfg, env, elites, n_gen=n_gen, vid_dir=vid_dir)
 
-def eval_elites(cfg: GenEnvConfig, env: PlayEnv, elites: Iterable[IndividualData], n_gen: int, vid_dir: str):
+def eval_elites(cfg: EvoConfig, env: PlayEnv, elites: Iterable[IndividualData], n_gen: int, vid_dir: str):
     """ Evaluate elites."""
     # Sort elites by fitness.
     elites = sorted(elites, key=lambda e: e.fitness, reverse=True)

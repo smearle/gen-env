@@ -7,7 +7,7 @@ from omegaconf import DictConfig
 
 
 @dataclass
-class GenEnvConfig:
+class EvoConfig:
     evo_seed: int = 0
     seed: int = 0
     # map_width: int = 16
@@ -32,7 +32,7 @@ class GenEnvConfig:
     runs_dir_il: str = "il_player"
     # When collecting elite envs/playtraces from evolution, latest gen to include (if None, include all).
     load_gen: Optional[int] = None
-    load_game: Optional[str] = None
+    load_game: bool = False
     collect_elites: bool = False
     load_game: Optional[str] = None
     render_all: bool = False
@@ -67,7 +67,7 @@ class GenEnvConfig:
     hidden_dims: Tuple[int, int] = (256, 256)
 
 @dataclass
-class ILConfig(GenEnvConfig):
+class ILConfig(EvoConfig):
     MAX_GRAD_NORM: float = 0.5
     il_seed: int = 0
     il_exp_name: str = "0"
@@ -181,6 +181,13 @@ class EnjoyConfig(RLConfig):
 #     # How many episodes to render as gifs
 #     n_eps: int = 10
 
+@dataclass
+class MapElitesConfig(EvoConfig):
+    n_initial: int = 10
+    n_gen: int = 100
+    bins: int = 100
+    metric: str = "shannon"
+
     
 @dataclass
 class EvalConfig(RLConfig):
@@ -207,11 +214,12 @@ class SweepConfig():
 
 
 cs = ConfigStore.instance()
-cs.store(name="base_config", node=GenEnvConfig)
+cs.store(name="base_config", node=EvoConfig)
 # cs.store(name="rl_config_old", node=RLConfig)
 cs.store(name="il_config", node=ILConfig)
 # cs.store(name="train_xlife", node=TrainConfig)
 cs.store(name="rl_config", node=RLConfig)
+cs.store(name="me", node=MapElitesConfig)
 cs.store(name="sweep_config", node=SweepConfig)
 cs.store(name="enjoy_config", node=EnjoyConfig)
 # cs.store(name="enjoy_accel_xlife", node=EnjoyAccelConfig)

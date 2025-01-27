@@ -10,7 +10,7 @@ from jax import numpy as jnp
 import numpy as np
 
 from gen_env.envs.play_env import GenEnvParams, PlayEnv
-from gen_env.configs.config import GenEnvConfig
+from gen_env.configs.config import EvoConfig
 from gen_env.rules import Rule, RuleData, RuleSet, mutate_rules
 from gen_env.tiles import TileType, TileSet
 
@@ -35,6 +35,10 @@ class IndividualPlaytraceData:
     rew_seq: chex.Array
     done_seq: chex.Array
 
+def hash_env(env_params):
+    hashable_env = jax.tree_map(lambda x: np.array(x).tobytes(), env_params)
+    flat_hashable_env: List = jax.tree_leaves(hashable_env)
+    return hash(frozenset(flat_hashable_env))
     
 def hash_individual(individual: IndividualData) -> int:
     hashable_elite = jax.tree_map(lambda x: np.array(x).tobytes(), individual)
@@ -42,8 +46,27 @@ def hash_individual(individual: IndividualData) -> int:
     flat_hashable_elite: List = jax.tree_leaves(hashable_elite)
     return hash(frozenset(flat_hashable_elite))
 
+def mutate_params(cfg, key, params: GenEnvParams):
+    map, rules = mutate(cfg, key, params.map, params.rules)
+    return params.replace(map=map, rules=rules)
+
+def mutate(cfg, key, map, rules):
+    rules = jax.lax.cond(cfg.mutate_rules, lambda key, rules: mutate_rules(key, rules), lambda _, __: rules, key, rules)
+    map = jax.lax.cond(cfg.mutate_map, lambda key, map: mutate_map(key, map), lambda _, __: map, key, map)
+    return map, rules
+
+def mutate_map(key, map):
+    flip_pct = jax.random.uniform(key, shape=(), minval=0.0, maxval=0.5)
+    bit_flips = jax.random.bernoulli(key, p=flip_pct, shape=map.shape)
+
+    # Mask out bit flips at `player_idx`        
+    bit_flips = bit_flips.at[0].set(0)
+    map = map.astype(jnp.int16)
+    map = jnp.bitwise_xor(map, bit_flips)
+    return map
+
 class Individual():
-    def __init__(self, cfg: GenEnvConfig, tiles: Iterable[TileType]):
+    def __init__(self, cfg: EvoConfig, tiles: Iterable[TileType]):
         self.cfg = cfg
         # self.tiles = tiles
         # self.rules = rules
@@ -64,69 +87,8 @@ class Individual():
         assert self.player_idx == 0
 
     def mutate(self, key, map, rules, tiles):
+        return mutate(self.cfg, key, map, rules)
 
-        # def mutate_rules(key, rules, tiles) -> RuleData:
-
-        #     def _mutate_rule(key, rule, rule_reward, tiles):
-        #         rule_int, rule_reward = mutate_rule(key, rule, rule_reward, tiles)
-        #         rules = RuleData(rule=rule_int, reward=rule_reward)
-        #         return rules
-
-        #     mutate_keys = jax.random.split(key, rules.rule.shape[0])
-
-        #     mutated_rules = jax.vmap(_mutate_rule, in_axes=(0, 0, 0, None))\
-        #         (mutate_keys, rules.rule, rules.reward, tiles)
-
-        #     # Uniform sample probability of masking out rule mutations
-        #     mask_pct = jax.random.uniform(key, shape=(1,), minval=0.0, maxval=0.5)
-        #     mask = jax.random.bernoulli(key, p=mask_pct, shape=rules.reward.shape)
-        #     mutated_rules = mutated_rules.replace(
-        #         rule=jax.tree_map(lambda x: jnp.where(mask[...,None,None,None,None,None], x, 0), mutated_rules.rule),
-        #         reward=jax.tree_map(lambda x: jnp.where(mask, x, 0), mutated_rules.reward),
-        #     )
-
-        #     return mutated_rules
-
-        rules = jax.lax.cond(self.cfg.mutate_rules, lambda key, rules: mutate_rules(key, rules), lambda _, __: rules, key, rules)
-
-        # if not hasattr(self.cfg, 'fix_map') or not self.cfg.fix_map:
-        # if not self.cfg.fix_map:
-            # Mutate between 0 and 3 random tiles
-            # j_arr = np.random.randint(0, len(self.tiles) - 1, random.randint(0, 3))
-            # for j in j_arr:
-            #     tile: TileType = self.tiles[j]
-            #     if tile.is_player:
-            #         continue
-            #     other_tiles = [t for t in self.tiles[:j] + self.tiles[j+1:] if not t.is_player]
-            #     tile.mutate(other_tiles)
-
-
-            # TODO: This should be multi-hot (repairing impossible co-occurrences after). 
-            # Currently evolving a onehot initial map, adding co-occurrences later.
-
-        # Mutate onehot map by randomly changing some tile types
-        # Pick number of tiles to sample from gaussian
-        # n_mut_tiles = abs(int(np.random.normal(0, 10)))
-        # disc_map = self.map.argmax(axis=0)
-        # k_arr = np.random.randint(0, disc_map.size - 1, n_mut_tiles)
-
-        flip_pct = jax.random.uniform(key, shape=(), minval=0.0, maxval=0.5)
-        bit_flips = jax.random.bernoulli(key, p=flip_pct, shape=map.shape)
-
-        # Mask out bit flips at `player_idx`        
-        bit_flips = bit_flips.at[self.player_idx].set(0)
-
-        map = map.astype(jnp.int16)
-        map = jnp.bitwise_xor(map, bit_flips)
-
-        # for k in k_arr:
-            # breakpoint()
-            # disc_map.flat[k] = np.random.randint(0, len(self.tiles))
-        
-        # self.map = PlayEnv.repair_map(disc_map, self.tiles)
-        # self.map = PlayEnv.repair_map(key, map, fixed_tile_nums=fixed_tile_nums)
-
-        return map, rules
 
 
     # TODO: bring this up to speed

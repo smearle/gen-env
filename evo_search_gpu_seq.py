@@ -25,15 +25,15 @@ import numpy as np
 from multiprocessing import Pool
 from tensorboardX import SummaryWriter
 
-from gen_env.configs.config import GenEnvConfig
+from gen_env.configs.config import EvoConfig
 from gen_env.games import GAMES
 from gen_env.envs.play_env import GenEnvParams, PlayEnv
 from gen_env.evo.eval import evaluate_multi, evaluate
 from gen_env.evo.individual import Individual, IndividualData, IndividualPlaytraceData, hash_individual
 from gen_env.rules import compile_rule
 from gen_env.utils import gen_rand_env_params, init_base_env, init_config
-from gen_env.evo.individual import Individual, IndividualData, hash_individual
-from utils import concatenate_leaves, load_elite_envs, stack_leaves
+from gen_env.evo.individual import Individual, IndividualData, hash_individual, hash_env
+from utils import concatenate_leaves, load_elite_envs, pad_frames, stack_leaves
 
 
 
@@ -45,7 +45,7 @@ class Playtrace:
     done_seq: chex.Array
 
     
-def collect_elites(cfg: GenEnvConfig, max_episode_steps: int):
+def collect_elites(cfg: EvoConfig, max_episode_steps: int):
 
     # If overwriting, or elites have not previously been aggregated, then collect all unique games.
     # if cfg.overwrite or not os.path.isfile(unique_elites_path):
@@ -179,7 +179,7 @@ def collect_elites(cfg: GenEnvConfig, max_episode_steps: int):
     # Additionally save elites to workspace directory for easy access for imitation learning
     # np.savez(unique_elites_path, elites)
 
-def split_elites(cfg: GenEnvConfig, playtraces: Playtrace):
+def split_elites(cfg: EvoConfig, playtraces: Playtrace):
     """ Split elites into train, val and test sets."""
     # playtraces.sort(key=lambda x: x.fitness, reverse=True)
     # Sort 
@@ -224,7 +224,7 @@ def split_elites(cfg: GenEnvConfig, playtraces: Playtrace):
     return train_elites, val_elites, test_elites
 
 
-def replay_episode_jax(cfg: GenEnvConfig, env: PlayEnv, elite: IndividualData, 
+def replay_episode_jax(cfg: EvoConfig, env: PlayEnv, elite: IndividualData, 
                    record: bool = False, best_i: int = 0):
     """Re-play the episode, recording observations and rewards (for imitation learning)."""
     # FIXME: This is super slow! Maybe better to do a scan over max_episode_steps, then slice away invalid moves?
@@ -285,7 +285,7 @@ def replay_episode_jax(cfg: GenEnvConfig, env: PlayEnv, elite: IndividualData,
     return playtrace, None
 
 
-def replay_episode(cfg: GenEnvConfig, env: PlayEnv, elite: IndividualData, 
+def replay_episode(cfg: EvoConfig, env: PlayEnv, elite: IndividualData, 
                    record: bool = False, best_i: int = 0):
     """Re-play the episode, recording observations and rewards (for imitation learning)."""
     # print(f"Fitness: {elite.fitness}")
@@ -347,7 +347,7 @@ def replay_episode(cfg: GenEnvConfig, env: PlayEnv, elite: IndividualData,
 
 
 @hydra.main(version_base='1.3', config_path="gen_env/configs", config_name="evo")
-def main(cfg: GenEnvConfig):
+def main(cfg: EvoConfig):
     # Try/except to avoid submitit-launcher-plugin swallowing up our error tracebacks.
     try:
         _main(cfg)
@@ -355,7 +355,7 @@ def main(cfg: GenEnvConfig):
         traceback.print_exc(file=sys.stderr)
         raise
 
-def _main(cfg: GenEnvConfig):
+def _main(cfg: EvoConfig):
     init_config(cfg)
     vid_dir = os.path.join(cfg._log_dir_evo, 'videos')
     
@@ -391,19 +391,6 @@ def _main(cfg: GenEnvConfig):
                 save_files = glob.glob(os.path.join(cfg._log_dir_evo, 'gen-*.npz'))
                 save_file = max(save_files, key=lambda x: int(x.split('-')[-1].split('.')[0]))
 
-            # HACK to load trained run after refactor
-            # from gen_env import evo
-            # from gen_env import configs
-            # from gen_env import tiles, rules
-            # import sys
-            # individual = evo.individual
-            # sys.modules['individual'] = individual
-            # sys.modules['evo'] = evo
-            # sys.modules['configs'] = configs
-            # sys.modules['tiles'] = tiles
-            # sys.modules['rules'] = rules
-            # end HACK
-
             save_dict = np.load(save_file, allow_pickle=True)['arr_0'].item()
             n_gen = save_dict['n_gen']
             elite_inds = save_dict['elites']
@@ -425,11 +412,7 @@ def _main(cfg: GenEnvConfig):
     env.tiles
     ind = Individual(cfg, env.tiles)
     key = jax.random.PRNGKey(cfg.evo_seed)
-    env_state, obs = env.reset(key=key, params=base_params)
-    # if num_proc > 1:
-    #     envs, params = zip(*[init_base_env(cfg) for _ in range(num_proc)])
-    #     breakpoint()
-        # envs = [init_base_env(cfg) for _ in range(num_proc)]
+    # env_state, obs = env.reset(key=key, params=base_params)
 
     if cfg.evaluate:
         # breakpoint()
@@ -447,16 +430,7 @@ def _main(cfg: GenEnvConfig):
             eval_elites(cfg, env, elite_inds, n_gen=n_gen, vid_dir=vid_dir, overwrite=False)
         return
 
-    def multiproc_eval_offspring(offspring):
-        eval_offspring = []
-        while len(offspring) > 0:
-            envs = [env for _ in range(len(offspring))]
-            eval_offspring += pool.map(evaluate_multi, [(key, env, ind, render, trg_n_iter) for env, ind in zip(envs, offspring)])
-            offspring = offspring[cfg.n_proc:]
-        return eval_offspring
-
-    fixed_tile_nums = np.array([t.num if t.num is not None else -1 for t in env.tiles])
-
+    # Expand rules as given in definition into version including sub-rules (i.e. rotations)
     game_def = GAMES[cfg.game].make_env()
     for rule in game_def.rules:
         rule.n_tile_types = len(game_def.tiles)
@@ -473,48 +447,42 @@ def _main(cfg: GenEnvConfig):
         offspring_params = []
         for _ in range(pop_size):
             key, _ = jax.random.split(key)
-            o_params = gen_rand_env_params(cfg, key, game_def, rules)
-            # o_map, o_rules = ind.mutate(key=key, map=map, rules=rules, 
-            #                         tiles=tiles)
-            # o_params = base_params.replace(map=o_map, rules=o_rules)
+            o_params = gen_rand_env_params(cfg, key, base_params, game_def)
             offspring_params.append(o_params)
 
         offspring_inds = []
-        if n_proc == 1:
-            for o_params in offspring_params:
-                fitnesses, action_seqs = evaluate(key, env, o_params, render, trg_n_iter)
-                o_ind = IndividualData(env_params=o_params, fitness=fitnesses, action_seq=action_seqs)
-                offspring_inds.append(o_ind)
-        else:
-            with Pool(processes=n_proc) as pool:
-                offspring_fits = multiproc_eval_offspring(offspring_params)
-            for o_params, fit in zip(offspring_params, offspring_fits):
-                o_ind = IndividualData(env_params=o_params, fitness=fitnesses, action_seq=action_seqs)
-                offspring_inds.append(o_ind)
+        for o_params in offspring_params:
+            fitnesses, action_seqs = evaluate(key, env, o_params, render, trg_n_iter)
+            o_ind = IndividualData(env_params=o_params, fitness=fitnesses, action_seq=action_seqs)
+            offspring_inds.append(o_ind)
 
         elite_inds = offspring_inds
+
+    elites = set({hash_env(ind.env_params) for ind in elite_inds})
 
     # Training loop
     # Initialize tensorboard writer
     writer = SummaryWriter(log_dir=cfg._log_dir_evo)
     for n_gen in range(n_gen, 10000):
+        print(f"{len(elites)} unique elites")
         start_time = timer()
         # parents = np.random.choice(elite_inds, size=cfg.batch_size, replace=True)
         parents = np.random.choice(elite_inds, size=cfg.evo_pop_size, replace=True)
         offspring_inds = []
-        if n_proc == 1:
-            for p_ind in parents:
-                p_params = p_ind.env_params
-                # o: Individual = copy.deepcopy(p)
-                key, _ = jax.random.split(key)
-                map, rules = ind.mutate(key, p_params.map, p_params.rules, env.tiles)
-                o_params = p_params.replace(map=map, rules=rules)
-                fitnesses, action_seqs = evaluate(key, env, o_params, render, trg_n_iter)
-                o_ind = IndividualData(env_params=o_params, fitness=fitnesses, action_seq=action_seqs)
-                offspring_inds.append(o_ind)
-        else:
-            with Pool(processes=n_proc) as pool:
-                offspring_inds = multiproc_eval_offspring(p_params, env.tiles)
+        for p_ind in parents:
+            p_params = p_ind.env_params
+            # o: Individual = copy.deepcopy(p)
+            key, _ = jax.random.split(key)
+            map, rules = ind.mutate(key, p_params.map, p_params.rules, env.tiles)
+            o_params = p_params.replace(map=map, rules=rules)
+            o_hash = hash_env(o_params)
+            # if o_hash in elites:
+            #     print('skipping repeat env params')
+            #     continue
+            elites.add(o_hash)
+            fitnesses, action_seqs = evaluate(key, env, o_params, render, trg_n_iter)
+            o_ind = IndividualData(env_params=o_params, fitness=fitnesses, action_seq=action_seqs)
+            offspring_inds.append(o_ind)
 
         elite_inds = np.concatenate((elite_inds, offspring_inds))
         # Discard the weakest.
@@ -564,7 +532,7 @@ def _main(cfg: GenEnvConfig):
             eval_elites(cfg, env, elite_inds, n_gen=n_gen, vid_dir=vid_dir)
 
 
-def eval_elites(cfg: GenEnvConfig, env: PlayEnv, elites: Iterable[IndividualData], n_gen: int, vid_dir: str,
+def eval_elites(cfg: EvoConfig, env: PlayEnv, elites: Iterable[IndividualData], n_gen: int, vid_dir: str,
                 overwrite=True):
     """ Evaluate elites."""
     # Sort elites by fitness.
@@ -576,6 +544,7 @@ def eval_elites(cfg: GenEnvConfig, env: PlayEnv, elites: Iterable[IndividualData
                 continue
             print(f"Trace {best_i}, actions: {e.action_seq[best_i]}")
             playtraces, frames = replay_episode(cfg, env, e, record=cfg.record, best_i=best_i)
+            frames = pad_frames(frames)
             if cfg.record:
                 # imageio.mimsave(os.path.join(log_dir, f"gen-{n_gen}_elite-{e_idx}_fitness-{e.fitness}.gif"), frames, fps=10)
                 # Save as mp4

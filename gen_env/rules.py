@@ -150,9 +150,11 @@ class Rule():
         return hash(int_in_out.tobytes())
 
 
-def gen_rand_rule(rng, rules: RuleData) -> chex.Array:
+def gen_rand_rule(rng, like_rules: RuleData) -> chex.Array:
+    # By default we generate rotation-invariant rules
+    # Hackish: getting shape of (pre-rotation) rules by selecting a single rotation
     # (n_rules, n_rotations, in_out, n_tiles, height, width)
-    rand_rule = jax.random.randint(rng, rules.rule[:, 0:1, :, :, :, :].shape, minval=0, maxval=2, dtype=rules.rule.dtype)
+    rand_rule = jax.random.randint(rng, like_rules[:, 0:1, :, :, :, :].shape, minval=0, maxval=2, dtype=like_rules.dtype)
 
     # Cannot have any other tiles active in the input patch
     # rand_rule = rand_rule.at[:, :, 0].set(
@@ -178,27 +180,6 @@ def gen_rand_rule(rng, rules: RuleData) -> chex.Array:
 
 
 def mutate_rules(key, rules: RuleData):
-    # x = random.random()
-    # x = jax.random.uniform(key, minval=0.0, maxval=1.0)
-    # if False:
-    #     pass
-    # if x < 1 / n_muts:
-    #     return
-    # elif x < 2 / n_muts:
-    #     self.random = not self.random
-    # elif x < 3 / n_muts:
-    #     self.done = not self.done
-    # elif x < 1 / n_muts:
-    # if x < 0.2:
-        # reward = random.randint(-1, 1)
-        # reward = jax.random.randint(key, (1,), -1, 2).item()
-
-    # reward = jax.lax.cond(
-    #     x < 0.2,
-    #     lambda _: jax.random.randint(key, shape=(), minval=-1, maxval=2),
-    #     lambda _: reward, 
-    #     None
-    # )
     rule = rules.rule
     reward = rules.reward
     new_reward = jax.random.randint(key, shape=reward.shape, minval=-1.0, maxval=2.0)
@@ -210,72 +191,14 @@ def mutate_rules(key, rules: RuleData):
     pct_tiles_to_mutate = jax.random.uniform(key, shape=(), minval=0.0, maxval=0.5)
     tile_mask = jax.random.bernoulli(key, p=pct_tiles_to_mutate, shape=rule.shape)
     tile_mask = tile_mask * rule_mask
-    new_rule = gen_rand_rule(key, rules)
+    new_rule = gen_rand_rule(key, like_rules=rules.rule)
     rule = jnp.where(tile_mask, new_rule, rule)
+    return RuleData(rule=rule, reward=reward)
 
-    return rules
-    
-    # elif x < 5 / n_muts:
-    #     self.max_applications = random.randint(0, 11)
-    #     self.max_applications = math.inf if self.max_applications == 0 else self.max_applications
-    # elif x < 6 / n_muts:
-    #     self._rotate = not self._rotate
-    # elif x < 7 / n_muts:
-    #     self.inhibits = random.sample(other_rules, random.randint(0, len(other_rules)))
-    # elif x < 8 / n_muts:
-    #     self.children = random.sample(other_rules, random.randint(0, len(other_rules)))
-    # else:
-    #     # if 1 < 1 / n_muts:
-    #     if True:
-    #         pass
-    #         # Flip something in the in-out pattern.
-    #         # io_idx = random.randint(0, 1)
-    #         # io_idx = jax.random.randint(key, (1,), 0, 2).item()
-    #         # subp_idx = jax.random.randint(key, (1,), 0, rule.shape[1] - 1).item()
-    #         # if rule.shape[2] == 0:
-    #         #     raise Exception('Cannot mutate rule with no subpatterns')
-    #         # # i = random.randint(0, rule.shape[2] - 1)
-    #         # i = jax.random.randint(key, (1,), 0, rule.shape[2]).item()
-    #         # # j = random.randint(0,key, (1,),  rule.shape[3] -
-    #         # j = jax.random.randint(key, (1,), 0, rule.shape[3]).item()
+def compile_rule(rule: Rule):
+    """Generate a list of subrules resulting from rule (i.e. if applying rotation).
+    """
 
-    #         # # flip this bit
-    #         # new_rule = rule.at[io_idx, subp_idx, i, j].set(
-    #         #     (rule[io_idx, subp_idx, i, j] + 1) % 3 - 1)
-    #         new_rule = jax.random.randint(key, rule.shape, -1, 2)
-    #         pct_to_mutate = jax.random.uniform(key, shape=(), minval=0.0, maxval=0.3)
-    #         rule_mask = jax.random.bernoulli(key, p=pct_to_mutate, shape=rule.shape)
-    #         new_rule = jnp.where(rule_mask, new_rule, rule)
-
-    #         # Get rid of any rule affecting player
-    #         new_rule = new_rule.at[:, :, 0, :, :].set(0)
-
-    #     else:
-    #         # Add something to the in-out pattern. Either a new subpattern, new rows, or new columns
-    #         axis = random.randint(1, 3)
-    #         diff = random.randint(0, 1)
-    #         if diff == 0 and rule._in_out.shape[axis] > 1 or rule._in_out.shape[axis] == 3:
-    #             # Index of subpattern/row/column to be removed
-    #             i = random.randint(0, rule._in_out.shape[axis] - 1)
-    #             new_in_out = np.delete(rule._in_out, i, axis=axis)
-    #         else:
-    #             new_shape = list(rule._in_out.shape)
-    #             new_shape[axis] = 1
-    #             new = np.random.randint(0, len(tiles) + 1, new_shape)
-    #             # new = np.vectorize(lambda x: tiles[x] if x < len(tiles) else None)(new)
-    #             new = np.array(tiles + [None])[new]
-    #             new_in_out = np.concatenate((rule._in_out, new), axis=axis)
-    #     # if not is_valid(new_rule):
-    #     #     #FIXME
-    #     #     # breakpoint()
-    #     #     pass
-
-
-
-def compile_rule(rule):
-    # List of subrules resulting from rule (i.e. if applying rotation).
-    # in_out = np.vectorize(TileType.get_idx)(self._in_out)
-    # subrules = [in_out]
     # (in_out, subpatterns, height, width)
     in_out = rule._in_out
     subrules = [in_out]

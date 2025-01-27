@@ -7,11 +7,24 @@ import jax
 from jax import numpy as jnp
 import numpy as np
 
-from gen_env.configs.config import GenEnvConfig, ILConfig, RLConfig
+from gen_env.configs.config import EvoConfig, ILConfig, RLConfig
 from gen_env.envs.play_env import GenEnvParams, PlayEnv
 from gen_env.evo.individual import IndividualPlaytraceData
 from purejaxrl.wrappers import LogEnvState
 
+def pad_frames(frames):
+    frame_shapes = [frame.shape for frame in frames]
+    max_frame_w, max_frame_h = max(frame_shapes, key=lambda x: x[0])[0], \
+        max(frame_shapes, key=lambda x: x[1])[1]
+    # Pad frames to be same size
+    new_ep_frames = []
+    for frame in frames:
+        frame = np.pad(frame, ((0, max_frame_w - frame.shape[0]),
+                                  (0, max_frame_h - frame.shape[1]),
+                                  (0, 0)), constant_values=0)
+        new_ep_frames.append(frame)
+    return new_ep_frames
+        
 # Function to stack leaves of PyTrees
 def stack_leaves(trees):
     # Make sure each leaf is an array
@@ -69,7 +82,14 @@ def load_elite_envs(cfg, latest_gen) -> Tuple[IndividualPlaytraceData]:
     for e in [train_elites, val_elites, test_elites]:
         e: IndividualPlaytraceData
         n_elites = e.env_params.rule_dones.shape[0]
-        e = e.replace(env_params=e.env_params.replace(env_idx=jnp.arange(n_elites)))
+        old_env_params_dict = e.env_params.__dict__
+        old_env_params_dict.pop('env_idx')
+        new_env_params = GenEnvParams(
+            **e.env_params.__dict__,
+            env_idx=jnp.arange(n_elites),
+            # impassable_tiles=jnp.zeros((n_elites, e.env_params.map.shape[1],), dtype=bool),
+        )
+        e = e.replace(env_params=new_env_params)
         elites.append(e)
 
     # Sort train elites by fitness (seems to be already sorted but... just in case!)
@@ -189,7 +209,7 @@ def init_rl_config(cfg: RLConfig, latest_evo_gen: int):
     else:
         latest_il_update_step = None
     cfg._log_dir_rl = os.path.join(cfg._log_dir_rl, 
-        f'_evogen-{cfg.load_gen}_accel-{cfg.evo_freq}_' + \
+        f'evogen-{cfg.load_gen}_accel-{cfg.evo_freq}_' + \
         (f'nGens-{cfg.n_evo_gens}_' if cfg.n_evo_gens != 1 else '') + \
         f'ilstep-{latest_il_update_step}_' + \
         f'tenvs-{cfg.n_train_envs}_' + \

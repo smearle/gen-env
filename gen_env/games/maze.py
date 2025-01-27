@@ -9,51 +9,53 @@ from gen_env.tiles import TilePlacement, TileSet, TileType
 
 
 def make_env():
-    force = TileType(name='force', num=0, color='purple')
-    wall = TileType('wall', prob=0.1, color='black')
-    floor = TileType('floor', prob=0.9, color='grey')
+    # force = TileType(name='force', num=0, color='purple')
+    wall = TileType('wall', prob=0.1, color='brown')
+    floor = TileType('floor', prob=0.9, color='black')
     player = TileType('player', num=1, color='blue', cooccurs=[floor])
     goal = TileType('goal', num=1, color='green', cooccurs=[floor])
-    tiles = TileSet([goal, player, wall, force, floor])
+    tiles = TileSet([player, goal, wall, floor])
+    impassable_tiles = [wall]
     search_tiles = [floor, goal, player, wall]
 
-    player_move = Rule(
-        'player_move', 
-        in_out=np.array(  [# Both input patterns must be present to activate the rule.
-            [
-                [[player, floor]],  # Player next to a passable/floor tile.
-                [[None, force]], # A force is active on said passable tile.
-            ],
-            # Both changes are applied to the relevant channels, given by the respective input subpatterns.
-            [[[None, player]],  # Player moves to target. No change at source.
-            [[None, None]],  # Force is removed from target tile.
-            ],
-        ]),
-        rotate=True,)
+    # player_move = Rule(
+    #     'player_move', 
+    #     in_out=np.array(  [# Both input patterns must be present to activate the rule.
+    #         [
+    #             [[player, floor]],  # Player next to a passable/floor tile.
+    #             [[None, force]], # A force is active on said passable tile.
+    #         ],
+    #         # Both changes are applied to the relevant channels, given by the respective input subpatterns.
+    #         [[[None, player]],  # Player moves to target. No change at source.
+    #         [[None, None]],  # Force is removed from target tile.
+    #         ],
+    #     ]),
+    #     rotate=True,)
 
     player_consume_goal = Rule(
         'player_consume_goal',
         in_out=np.array([
             [
-                [[player, force]],  # Player and goal tile overlap.
-                [[None, goal]],
+                [[player]],  # Player and goal tile overlap.
+                [[goal]],
             ],
             [
-                [[None, player]],  # Player remains.
-                [[None, None]],  # Goal is removed.
+                [[player]],  # Player remains.
+                [[None]],  # Goal is removed.
             ]
         ]),
         rotate=True,
         reward=1,
         done=True,
     )
-    rules = RuleSet([player_move, player_consume_goal])
+    rules = RuleSet([player_consume_goal])
     # env = PlayEnv(height, width, tiles=tiles, rules=rules, player_placeable_tiles=[(force, TilePlacement.ADJACENT)],
     #     search_tiles=search_tiles)
     game_def = GameDef(
         tiles=tiles,
         rules=rules,
-        player_placeable_tiles=[(force, TilePlacement.ADJACENT)],
+        player_placeable_tiles=[],
         search_tiles=search_tiles,
+        impassable_tiles=impassable_tiles,
     )
     return game_def

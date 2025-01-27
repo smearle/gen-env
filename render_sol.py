@@ -5,12 +5,12 @@ import imageio
 import jax
 
 from gen_env.utils import init_base_env, pad_frames, save_video
-from gen_env.configs.config import GenEnvConfig
+from gen_env.configs.config import EvoConfig
 from search_agent import bfs, batched_bfs
 
 
 @hydra.main(version_base='1.3', config_path="gen_env/configs", config_name="evo")
-def render_sol(cfg: GenEnvConfig):
+def render_sol(cfg: EvoConfig):
     key = jax.random.PRNGKey(1)
     env, params = init_base_env(cfg)
     best_state_actions = None
@@ -19,7 +19,7 @@ def render_sol(cfg: GenEnvConfig):
     env, params = init_base_env(cfg)
     obs, state = env.reset_env(key=key, params=params)
     best_state_actions, best_reward, n_iter_best, n_iter = \
-        bfs(env, state, params=params, max_steps=10_000)
+        bfs(env, state, params=params, max_steps=50_000)
     print(f"Found best solution after {n_iter_best} iterations with {best_reward} reward. Searched for {n_iter} iterations total.")
     # Render the solution
     frames = []

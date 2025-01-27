@@ -23,21 +23,35 @@ def make_env():
     tiles = TileSet([player, force, crate, target, wall, floor])
     maps = None
     maps = np.array([
+        # [
+        #     [4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+        #     [4, 0, 5, 5, 5, 5, 5, 5, 5, 4],
+        #     [4, 4, 4, 4, 5, 5, 5, 5, 5, 4],
+        #     [4, 5, 5, 5, 5, 5, 5, 5, 5, 4],
+        #     [4, 5, 5, 5, 5, 4, 5, 5, 5, 4],
+        #     [4, 5, 5, 4, 2, 4, 5, 5, 5, 4],
+        #     [4, 5, 5, 5, 5, 4, 5, 5, 5, 4],
+        #     [4, 5, 5, 5, 5, 5, 5, 4, 4, 4],
+        #     [4, 5, 5, 5, 5, 5, 5, 5, 3, 4],
+        #     [4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+        # ],
         [
-            [4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
-            [4, 0, 5, 5, 5, 5, 5, 5, 5, 4],
-            [4, 5, 5, 5, 5, 5, 5, 5, 5, 4],
-            [4, 5, 5, 2, 5, 5, 5, 5, 5, 4],
-            [4, 5, 5, 5, 5, 5, 5, 5, 5, 4],
-            [4, 5, 5, 5, 5, 5, 5, 5, 5, 4],
-            [4, 5, 5, 5, 5, 5, 5, 5, 5, 4],
-            [4, 5, 5, 5, 5, 5, 5, 5, 5, 4],
-            [4, 5, 5, 5, 5, 5, 5, 5, 3, 4],
-            [4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+            [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+            [4, 4, 4, 4, 5, 5, 5, 4, 4, 4, 4],
+            [4, 5, 5, 4, 5, 5, 5, 4, 4, 4, 4],
+            [4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4],
+            [4, 0, 5, 5, 4, 2, 5, 5, 4, 5, 4],
+            [4, 4, 4, 5, 4, 5, 5, 5, 4, 5, 4],
+            [4, 4, 5, 5, 4, 4, 4, 4, 4, 5, 4],
+            [4, 4, 5, 5, 3, 5, 5, 5, 5, 5, 4],
+            [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+            [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+            [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
         ],
     ])
     maps = maps[0]
 
+    impassable_tiles = [wall, crate]
     search_tiles = [floor, wall, target, crate, player]
 
     done_at_reward = n_crates
@@ -61,11 +75,11 @@ def make_env():
             [
                 [[None, None, crate]],
                 [[None, None, target]],
-                # [[TileNot(force)]]  # Otherwise we can puch a clone-crate off a target.
+                # [[TileNot(force)]]  # Otherwise we can push a clone-crate off a target.
             ],
             [  # Kill target.
-                [[None, None, crate]],
-                [[None, None, target]],
+                [[None, None, wall]],
+                [[None, None, None]],
                 # [[None]],
             ]
         ]),
@@ -121,6 +135,7 @@ def make_env():
         player_placeable_tiles=[(force, TilePlacement.ADJACENT)],
         done_at_reward=n_crates,
         search_tiles=search_tiles,
+        impassable_tiles=impassable_tiles,
         map=maps,
     )
     return game_def

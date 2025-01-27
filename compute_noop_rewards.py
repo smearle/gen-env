@@ -2,12 +2,12 @@ from functools import partial
 import os
 import pickle
 
-from evaluate import eval_elite_noop, eval_elite_random
+from evaluate import eval_noop, eval_random
 import hydra
 import jax
 from jax import numpy as jnp
 
-from gen_env.configs.config import GenEnvConfig
+from gen_env.configs.config import EvoConfig
 from gen_env.envs.play_env import PlayEnv
 from gen_env.evo.individual import IndividualPlaytraceData
 from gen_env.utils import init_base_env, init_config
@@ -15,18 +15,18 @@ from utils import load_elite_envs
 
 
 @hydra.main(version_base='1.3', config_path="gen_env/configs", config_name="evo")
-def main(cfg: GenEnvConfig):
+def main(cfg: EvoConfig):
     init_config(cfg)
     train_elites, val_elites, test_elites = load_elite_envs(cfg, cfg.load_gen)
     return compute_noop_rewards(cfg, train_elites, val_elites, test_elites)
 
 
-def compute_noop_rewards(cfg: GenEnvConfig, train_elites: IndividualPlaytraceData,
+def compute_noop_rewards(cfg: EvoConfig, train_elites: IndividualPlaytraceData,
                          val_elites: IndividualPlaytraceData, test_elites: IndividualPlaytraceData):
     env, dummy_params = init_base_env(cfg)
     env: PlayEnv
-    _eval_elite_noop = partial(eval_elite_noop, env=env)
-    _eval_elite_random = partial(eval_elite_random, env=env)
+    _eval_elite_noop = partial(eval_noop, env=env)
+    _eval_elite_random = partial(eval_random, env=env)
     rng = jax.random.PRNGKey(cfg.seed)
     new_elite_sets = []
     for e in [train_elites, val_elites, test_elites]:

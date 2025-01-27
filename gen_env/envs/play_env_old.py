@@ -18,7 +18,7 @@ from jax import numpy as jnp
 import numpy as np
 from PIL import ImageFont, ImageDraw, Image
 
-from gen_env.configs.config import GenEnvConfig
+from gen_env.configs.config import EvoConfig
 from gen_env.events import Event, EventGraph
 from gen_env.objects import ObjectType
 from gen_env.rules import Rule
@@ -59,7 +59,7 @@ class PlayEnv(gym.Env):
             variables: Iterable[Variable] = [],
             done_at_reward: int = None,
             max_episode_steps: int = 100,
-            cfg: GenEnvConfig = None,
+            cfg: EvoConfig = None,
         ):
         """_summary_
 

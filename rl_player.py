@@ -10,7 +10,7 @@ from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env.subproc_vec_env import SubprocVecEnv
 import torch as th
 
-from gen_env.configs.config import GenEnvConfig
+from gen_env.configs.config import EvoConfig
 from gen_env.utils import init_base_env, init_evo_config
 
 
@@ -29,7 +29,7 @@ def callback(_locals, _globals):
 
 
 @hydra.main(version_base="1.3", config_path="gen_env/configs", config_name="rl")
-def main(cfg: GenEnvConfig):
+def main(cfg: EvoConfig):
     init_evo_config(cfg)
 
     gen_files = glob.glob(os.path.join(cfg._log_dir_common, "gen-*_elites.npz"))

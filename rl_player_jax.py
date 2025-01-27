@@ -21,6 +21,8 @@ import jax.numpy as jnp
 from omegaconf import OmegaConf
 import optax
 import orbax.checkpoint as ocp
+from gen_env.games import GAMES
+from gen_env.rules import compile_rule
 from purejaxrl.wrappers import LogEnvState
 from tensorboardX import SummaryWriter
 
@@ -530,7 +532,12 @@ def init_checkpointer(config: RLConfig, train_env_params: GenEnvParams, val_env_
 
 def restore_checkpoint(checkpoint_manager, runner_state, config):
     steps_prev_complete = checkpoint_manager.latest_step()
-    items = {'runner_state': runner_state, 'step_i': 0}
+    cfg_dict = config.__dict__
+    # for k, v in cfg_dict.items():
+    #     cfg_dict[k] = None
+    items = {'runner_state': runner_state, 
+            #  'config': cfg_dict, 
+             'step_i': 0}
     ckpt = checkpoint_manager.restore(steps_prev_complete, args=ocp.args.StandardRestore(items))
     runner_state = ckpt['runner_state']
     return runner_state
@@ -551,6 +558,11 @@ def _main(cfg: RLConfig):
     latest_evo_gen = init_il_config(cfg)
     latest_il_update_step = init_rl_config(cfg, latest_evo_gen)
 
+    game_def = GAMES[cfg.game].make_env()
+    for rule in game_def.rules:
+        rule.n_tile_types = len(game_def.tiles)
+        rule = compile_rule(rule)
+
     # Need to do this before setting up RL checkpoint manager so that it doesn't refer to old checkpoints.
     if cfg.overwrite and os.path.exists(cfg._log_dir_rl):
         shutil.rmtree(cfg._log_dir_rl)
@@ -566,26 +578,33 @@ def _main(cfg: RLConfig):
 
     rng = jax.random.PRNGKey(cfg.seed)
 
-    train_elites, val_elites, test_elites = load_elite_envs(cfg, latest_evo_gen)
 
-    # train_env_params = jax.tree.map(lambda x: x[:cfg.n_envs], train_elites.env_params)
-    val_env_params = val_elites.env_params
+    if cfg.load_gen is None:
 
-    # Then we load the latest gen
-    if cfg.load_gen is None and cfg.load_game is None:
-        # In this case, we generate random (probably garbage) environments upon which to begin training.
-        train_env_params = jax.vmap(gen_rand_env_params, in_axes=(None, 0, None, None))(
-            cfg, jax.random.split(rng, cfg.n_envs), env.game_def, env_params.rules)
+        if not cfg.load_game:
+            # In this case, we generate random (probably garbage) environments upon which to begin training.
+            train_env_params = jax.vmap(gen_rand_env_params, in_axes=(None, 0, None, None))(
+                cfg, jax.random.split(rng, cfg.n_envs), env_params, game_def)
+            val_env_params = jax.vmap(gen_rand_env_params, in_axes=(None, 0, None, None))(
+                cfg, jax.random.split(rng, cfg.n_val_envs), env_params, game_def)
+        else:
+            # This effectively loads up a sample (with potential repetition) of predefined maps
+            train_env_params = get_rand_train_envs(env_params, cfg.n_envs, rng, replace=True)
+            val_env_params = get_rand_train_envs(env_params, cfg.n_val_envs, rng, replace=True)
             
     else:
+        train_elites, val_elites, test_elites = load_elite_envs(cfg, latest_evo_gen)
+
+        # train_env_params = jax.tree.map(lambda x: x[:cfg.n_envs], train_elites.env_params)
+        val_env_params = val_elites.env_params
         train_env_params = train_elites.env_params
+
+        del train_elites, val_elites, test_elites
 
     if cfg.n_train_envs != -1:
         train_env_params = jax.tree.map(lambda x: x[-cfg.n_train_envs:], train_env_params)
     if cfg.n_val_envs != -1:
         val_env_params = jax.tree.map(lambda x: x[-cfg.n_val_envs:], val_env_params)
-
-    del train_elites, val_elites, test_elites
 
     checkpoint_manager, runner_state, network, env, env_params = init_checkpointer(
         cfg, train_env_params=train_env_params, val_env_params=val_env_params
