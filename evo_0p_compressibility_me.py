@@ -88,6 +88,8 @@ def main(cfg: MapElitesConfig):
     """
     save_dir = os.path.join(cfg.workspace, 'evo_compressibility')
     archive_path = os.path.join(save_dir, 'archive.npz')
+    os.makedirs(save_dir, exist_ok=True)
+
     # 1) Initialize environment
     env, base_params = init_base_env(cfg)
 
