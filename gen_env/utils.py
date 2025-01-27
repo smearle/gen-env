@@ -11,7 +11,7 @@ from jax import numpy as jnp
 import jax
 import numpy as np
 
-from gen_env.configs.config import EvoConfig
+from gen_env.configs.config import EvoConfig, MapElitesConfig
 from gen_env.envs.play_env import GameDef, PlayEnv, SB3PlayEnv, GenEnvParams
 from gen_env.evo.individual import IndividualData
 from gen_env.games import GAMES
@@ -36,6 +36,10 @@ def init_config(cfg: EvoConfig):
 
     # cfg.log_dir_evo = os.path.join(cfg.workspace, cfg.runs_dir_evo, f"exp-{cfg.exp_id}")
     cfg._log_dir_evo = os.path.join(cfg._log_dir_common, cfg.runs_dir_evo)
+
+
+def init_me_config(cfg: MapElitesConfig):
+    cfg._log_dir_me = os.path.join(cfg._log_dir_common, 'me')
 
     
 def pad_frames(frames):

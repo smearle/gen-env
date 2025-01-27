@@ -6,6 +6,7 @@ from typing import Any, Dict, Tuple
 
 import zlib
 import hydra
+import imageio
 import jax
 from jax import numpy as jnp
 import numpy as np
@@ -16,6 +17,7 @@ from gen_env.envs.play_env import GameDef, GenEnvParams, GenEnvState
 from gen_env.evo.individual import mutate, mutate_params
 from gen_env.games import GAMES
 from gen_env.utils import gen_rand_env_params, init_base_env, init_config
+from utils import pad_frames, stack_leaves
 
 
 def step_env_random(carry, _, env):
@@ -75,6 +77,33 @@ def ca_shannon_entropy(ca_states):
     flat_bits = ca_states.reshape(-1)
     return shannon_entropy(flat_bits)
 
+def render_archive(cfg, save_dir, archive_path):
+    env, base_params = init_base_env(cfg)
+    with open(archive_path, 'rb') as f:
+        archive = pickle.load(f)
+    
+    params_lst = [a[1] for a in archive if a is not None]
+    params = stack_leaves(params_lst)
+    states = jax.vmap(eval_random, in_axes=(0, None, None))(
+        params,
+        env,
+        1,
+    )
+    for bin_i in range(states.ep_rew.shape[0]):
+        ep_frames = []
+        for step_i in range(states.ep_rew.shape[1]):
+            state_i = jax.tree.map(lambda x: x[bin_i, step_i], states)
+            frame = env.render(state_i, params_lst[bin_i])
+            ep_frames.append(frame)
+        frames = pad_frames(ep_frames)
+        gif_name=os.path.join(save_dir, f"{bin_i}.gif")
+        imageio.v3.imwrite(
+            gif_name,
+            frames,
+            duration=100,
+            loop=0,
+        )
+
 @hydra.main(version_base=None, config_path='gen_env/configs', config_name='me')
 def main(cfg: MapElitesConfig):
     """
@@ -86,9 +115,13 @@ def main(cfg: MapElitesConfig):
       - cfg.metric  (one of ["shannon", "lz"])
       - etc.
     """
+    init_config(cfg)
     save_dir = os.path.join(cfg.workspace, 'evo_compressibility')
-    archive_path = os.path.join(save_dir, 'archive.npz')
     os.makedirs(save_dir, exist_ok=True)
+    archive_path = os.path.join(save_dir, 'archive.npz')
+
+    if cfg.evaluate:
+        return render_archive(cfg, save_dir, archive_path)
 
     # 1) Initialize environment
     env, base_params = init_base_env(cfg)
@@ -98,6 +131,7 @@ def main(cfg: MapElitesConfig):
     # We store in each bin: (fitness, genotype, descriptor)
     # Initialize the archive with None
     archive = [None] * n_bins
+
 
     def descriptor_to_bin(descriptor_val: float) -> int:
         """
@@ -131,20 +165,26 @@ def main(cfg: MapElitesConfig):
 
         fitness = jnp.std(states.ep_rew)
 
-        return fitness, descriptor_val
+        return fitness, mean_val
 
     # --- 3) Initialization: Generate random solutions and fill the archive ---
     key = jax.random.PRNGKey(0)
     game_def: GameDef = GAMES[cfg.game].make_env()
-    for _ in range(cfg.n_initial):
-        key, _ = jax.random.split(key)
-        params = gen_rand_env_params(cfg, key, base_params, game_def)
-        fit, desc = evaluate_solution(params)
-        b = descriptor_to_bin(desc)
 
-        # If this bin is empty or we found a better fitness, update
-        if archive[b] is None or fit > archive[b][0]:
-            archive[b] = (fit, params, desc)
+    if os.path.isfile(archive_path):
+        with open(archive_path, 'rb'):
+            archive = pickle.load(archive_path)
+
+    else:
+        for _ in range(cfg.n_initial):
+            key, _ = jax.random.split(key)
+            params = gen_rand_env_params(cfg, key, base_params, game_def)
+            fit, desc = evaluate_solution(params)
+            b = descriptor_to_bin(desc)
+
+            # If this bin is empty or we found a better fitness, update
+            if archive[b] is None or fit > archive[b][0]:
+                archive[b] = (fit, params, desc)
 
     # --- 4) Main MAP-Elites loop ---
     for gen in range(cfg.n_gen):

@@ -186,7 +186,8 @@ class MapElitesConfig(EvoConfig):
     n_initial: int = 10
     n_gen: int = 100
     bins: int = 100
-    metric: str = "shannon"
+    metric: str = "lz"
+    mutate_map: bool = True
 
     
 @dataclass
