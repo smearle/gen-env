@@ -366,6 +366,7 @@ def cross_eval_misc(name: str, sweep_configs: Iterable[SweepConfig], hypers, alg
     dummy_cfg = sweep_configs[0]
     csv_paths = glob.glob(os.path.join(getattr(dummy_cfg, log_dir_attr), '*.csv'))
     key_names = [csv_path.split(os.sep)[-1].removesuffix('.csv') for csv_path in csv_paths]
+    breakpoint()
     stat_name_to_row_vals_curves = {}
     stat_name_to_all_timesteps = {}
 

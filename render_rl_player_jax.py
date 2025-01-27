@@ -63,36 +63,6 @@ class Transition(NamedTuple):
     # rng_act: jnp.ndarray
 
 
-def log_callback(metric, steps_prev_complete, cfg: RLConfig, writer, train_start_time):
-    timesteps = metric["timestep"][metric["returned_episode"]
-                                    ] * cfg.n_envs
-    return_values = metric["returned_episode_returns"][metric["returned_episode"]]
-
-    if len(timesteps) > 0:
-        t = timesteps[0]
-        ep_return_mean = return_values.mean()
-        ep_return_max = return_values.max()
-        ep_return_min = return_values.min()
-        print(f"global step={t}; episodic return mean: {ep_return_mean} " + \
-            f"max: {ep_return_max}, min: {ep_return_min}")
-        ep_length = (metric["returned_episode_lengths"]
-                        [metric["returned_episode"]].mean())
-
-        # Add a row to csv with ep_return
-        with open(os.path.join(cfg._log_dir_rl,
-                                "progress.csv"), "a") as f:
-            f.write(f"{t},{ep_return_mean}\n")
-
-        writer.add_scalar("rl/ep_return", ep_return_mean, t)
-        writer.add_scalar("rl/ep_return_max", ep_return_max, t)
-        writer.add_scalar("rl/ep_return_min", ep_return_min, t)
-        writer.add_scalar("rl/ep_length", ep_length, t)
-        fps = (t - steps_prev_complete) / (timer() - train_start_time)
-        writer.add_scalar("rl/fps", fps, t)
-
-        print(f"fps: {fps}")
-
-
 def render(train_env_params, env: LogWrapper, cfg, network, network_params, runner_state):
 
     rng = jax.random.PRNGKey(cfg.seed)

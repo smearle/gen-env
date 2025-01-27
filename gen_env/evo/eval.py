@@ -1,3 +1,5 @@
+from timeit import default_timer as timer
+
 import jax
 from jax import numpy as jnp
 import numpy as np
@@ -40,8 +42,8 @@ def evaluate_multi(key: jax.random.PRNGKey, env: PlayEnv, env_params: GenEnvPara
     print(f"Achieved fitnesses:\n{fitnesses.tolist()}\nat\n{n_iter_bests}\niterations with\n{best_rewards}\nreward. Searched for {n_iter} iterations total.")
     return fitnesses, best_action_seqs
 
-def evaluate(key: jax.random.PRNGKey,
-             env: PlayEnv, env_params: GenEnvParams, render: bool, trg_n_iter: int):
+def evaluate(key: jax.random.PRNGKey, env: PlayEnv, env_params: GenEnvParams, render: bool, trg_n_iter: int):
+    start_time = timer()
     # load_game_to_env(env, env_params)
     # env.queue_games([env_params.map.copy()], [env_params.rules.copy()])
     # params = get_params_from_individual(env, individual)
@@ -70,5 +72,6 @@ def evaluate(key: jax.random.PRNGKey,
     # fitness = len(action_seq) if action_seq is not None else 0
     # env_params.fitness = fitness
     # env_params.action_seq = action_seq
-    print(f"Achieved fitnesses {fitnesses.tolist()} at {n_iter_bests} iterations with {best_rewards} reward. Searched for {n_iter} iterations total.")
+    fps = n_iter / (timer() - start_time)
+    print(f"Achieved fitnesses {fitnesses.tolist()} at {n_iter_bests} iterations with {best_rewards} reward. Searched for {n_iter} iterations total. FPS: {fps}")
     return fitnesses, action_seqs

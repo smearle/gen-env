@@ -32,7 +32,7 @@ from gen_env.utils import gen_rand_env_params, init_base_env, init_config
 from il_player_jax import init_bc_agent
 from purejaxrl.experimental.s5.wrappers import LogWrapper
 from pcgrl_utils import get_rl_ckpt_dir, get_network
-from utils import evaluate_on_env_params, get_rand_train_envs, init_il_config, init_rl_config, load_elite_envs
+from utils import evaluate_on_env_params, get_rand_train_envs, init_il_config, init_rl_config, load_elite_envs, save_train_env_params
 logging.getLogger('jax').setLevel(logging.INFO)
 
 
@@ -200,6 +200,10 @@ def make_train(cfg: RLConfig, init_runner_state: RunnerState, il_params, checkpo
         _log_callback = partial(log_callback, cfg=cfg, writer=writer,
                                train_start_time=train_start_time,
                                steps_prev_complete=steps_prev_complete)
+        
+        evolved_env_params_dir = os.path.join(cfg._log_dir_rl, "evolved_envs")
+        os.makedirs(evolved_env_params_dir, exist_ok=True)
+        _save_train_env_params = partial(save_train_env_params, log_dir=evolved_env_params_dir)
 
 
         def save_checkpoint(runner_state, info, steps_prev_complete):
@@ -419,6 +423,13 @@ def make_train(cfg: RLConfig, init_runner_state: RunnerState, il_params, checkpo
                 )
 
                 next_train_env_params = evo_state.env_params
+
+                # do_save = runner_state.update_i % cfg.evo_save_freq == 0
+                # jax.lax.cond(
+                #     do_save,
+                #     lambda: jax.debug.callback(_save_train_env_params, evo_state.env_params, runner_state.update_i),
+                #     lambda: None,
+                # )
             else:
                 # If we're not evolving the envs, just keep the same training set.
                 next_train_env_params = train_env_params

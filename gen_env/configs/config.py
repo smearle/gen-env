@@ -20,7 +20,7 @@ class GenEnvConfig:
     evo_pop_size: int = 40
     game: str = "blank_for_evo"
     mutate_rules: bool = True
-    fix_map: bool = False
+    mutate_map: bool = False
     evaluate: bool = False
     eval_freq: int = -1
     save_freq: int = 1
@@ -114,6 +114,7 @@ class RLConfig(ILConfig):
 
     evo_freq: int = -1
     n_evo_gens: int = 1
+    evo_save_freq: int = 10
     val_freq: int = 10
     n_envs: int = 100
     evo_pop_size: int = 10
@@ -170,6 +171,8 @@ class EnjoyConfig(RLConfig):
     random_agent: bool = False
     # How many episodes to render as gifs
     n_eps: int = 10
+    # Path to a .npz or .pkl file containing env params to render.
+    envs_to_render: Optional[str] = None
 
 
 # @dataclass

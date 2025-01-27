@@ -42,18 +42,26 @@ def expand_frontier(env: PlayEnv, next_frontier: SearchNode, params: GenEnvParam
 
     def expand_frontier_node(key, state, action_seq):
         step_key = jax.random.split(key, possible_actions.shape[0])
-        nodes = \
-            jax.vmap(apply_action, in_axes=(None, None, 0, None, None))(
-                step_key,
-                state,
-                possible_actions,
-                params,
-                action_seq,
-            )
+        nodes = jax.vmap(
+            apply_action, 
+            in_axes=(None, None, 0, None, None)
+        )(
+            step_key,
+            state,
+            possible_actions,
+            params,
+            action_seq,
+        )
         return nodes
 
-    frontier = jax.vmap(expand_frontier_node, in_axes=(None, 0, 0))(
-        jax.random.PRNGKey(0), next_frontier.state, next_frontier.action_seq)
+    frontier = jax.vmap(
+        expand_frontier_node, 
+        in_axes=(None, 0, 0)
+    )(
+        jax.random.PRNGKey(0),
+        next_frontier.state,
+        next_frontier.action_seq
+    )
 
     # Flatten the frontier/possible-actions dimensions so the first dimension corresponds to newly generated states
     frontier = jax.tree_map(lambda x: jnp.reshape(x, (-1, *x.shape[2:])), frontier)
@@ -63,7 +71,6 @@ def expand_frontier(env: PlayEnv, next_frontier: SearchNode, params: GenEnvParam
 
 def batched_bfs(env: PlayEnv, state: GenEnvState, params: GenEnvParams,
           max_steps: int = inf, render: bool = RENDER, max_episode_steps: int = 100):
-    """Apply a search algorithm to find the sequence of player actions leading to the highest possible reward."""
 
     key = jax.random.PRNGKey(0)
     action_seq = jnp.empty(max_episode_steps, dtype=jnp.int32)

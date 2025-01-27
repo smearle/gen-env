@@ -198,3 +198,11 @@ def init_rl_config(cfg: RLConfig, latest_evo_gen: int):
         (f'noObsRewNorm_' if not cfg.obs_rew_norm else '') + \
         f's-{cfg.rl_seed}_{cfg.rl_exp_name}')
     return latest_il_update_step
+
+
+def save_train_env_params(train_env_params, update_i, log_dir):
+    save_path = os.path.join(log_dir, f"train_env_params_update_{update_i}")
+    jnp.savez(save_path, train_env_params)
+    # with open(save_path, "wb") as f:
+    #     pickle.dump(train_env_params, f)
+    print(f"Saved train_env_params to {save_path}")
