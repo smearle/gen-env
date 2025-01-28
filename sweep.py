@@ -10,7 +10,8 @@ from evaluate_rl import eval_rl
 import hydra
 import submitit
 
-from gen_env.configs.config import ILConfig, RLConfig, SweepConfig
+from evo_search_gpu_seq import main as evolve
+from gen_env.configs.config import EvoConfig, ILConfig, RLConfig, SweepConfig
 from il_player_jax import main as train_il
 from rl_player_jax import main as train_rl
 from plot_il import main as plot_il
@@ -33,7 +34,7 @@ class HyperParamsIL:
     # obs_window: Tuple[int] = (5, 10, 20)
 
     hide_rules: Tuple[bool] = (False,)
-    obs_rew_norm: Tuple[bool] = (False,)
+    obs_rew_norm: Tuple[bool] = (True,)
     n_train_envs: Tuple[int] = (-1,)
 
 
@@ -56,6 +57,17 @@ class HyperParamsRL:
     hide_rules: Tuple[bool] = (False,)
     total_timesteps: int = (100_000_000,)
 
+@dataclass
+class HyperParamsEvo:
+    evo_seed: Tuple[int] = (0, 1, 2, 3, 4)
+    mutate_rules: bool = (True,)
+    mutate_map: bool = (True,)
+    domain_randomize: bool = (True,False)
+
+evo_sweeps = {
+    'default': HyperParamsEvo(),
+}
+
 il_sweeps = {
     'obs_win': HyperParamsIL(
         obs_window=(5, 10, 20, -1),
@@ -69,6 +81,11 @@ il_sweeps = {
     ),
     'n_envs': HyperParamsIL(
         n_train_envs=(1, 10, 50, 100, -1),
+    ),
+    'load_gen': HyperParamsIL(
+        load_gen=(0, 5, 10),
+        # load_gen=(2, 4, 6, 8, 12, 14, 16, 18),
+        n_train_envs=(-1,),
     ),
 }
 
@@ -95,7 +112,7 @@ rl_sweeps = {
     ),
     'load_gen': HyperParamsRL(
         # load_gen=(0, 5, 10),
-        load_gen=(2, 4, 6, 8, 12, 14, 16, 18),
+        load_gen=(0, 5, 10, 15),
         n_train_envs=(-1,),
         total_timesteps=(1e9,)
     ),
@@ -109,6 +126,8 @@ def main(cfg: SweepConfig):
         hypers = il_sweeps[cfg.name]
     elif cfg.algo == 'rl':
         hypers = rl_sweeps[cfg.name]
+    elif cfg.algo == 'evo':
+        hypers = evo_sweeps[cfg.name]
     hypers_dict = dict(hypers.__dict__)
     h_ks, h_vs = zip(*hypers_dict.items())
     all_hyper_combos = list(itertools.product(*h_vs))
@@ -131,6 +150,10 @@ def main(cfg: SweepConfig):
                 # overwrite=True,
                 # total_timesteps=100_000_000,
         )
+        elif cfg.algo == 'evo':
+            e_cfg = EvoConfig(
+                **h,
+            )
         # Filter out invalid combinations of hyperparameters
         if e_cfg.hide_rules and e_cfg.obs_rew_norm:
             continue
@@ -151,6 +174,8 @@ def main(cfg: SweepConfig):
             main_fn = train_il
         elif cfg.algo == 'rl':
             main_fn = train_rl
+        elif cfg.algo == 'evo':
+            main_fn = evolve
 
     elif cfg.mode == 'plot':
         cfg.slurm = False
@@ -172,15 +197,19 @@ def main(cfg: SweepConfig):
     if cfg.slurm:
         print('Submitting jobs to SLURM cluster.')
         executor = submitit.AutoExecutor(folder=f'submitit_logs_{cfg.algo}')
+        if cfg.algo == 'evo':
+            submitit_args = dict()
+        else:
+            submitit_args = dict(slurm_gres='gpu:1')
+
         executor.update_parameters(
                 slurm_job_name=f"{cfg.algo}_{cfg.mode}_{sweep_name}",
                 mem_gb=30,
                 tasks_per_node=1,
                 cpus_per_task=1,
-                # gpus_per_node=1,
                 timeout_min=2880,
-                slurm_gres='gpu:1',
-                slurm_account='pr_174_general',
+                slurm_account='pr_174_tandon_advanced',
+                **submitit_args,
             )
         executor.map_array(main_fn, sweep_cfgs)
 

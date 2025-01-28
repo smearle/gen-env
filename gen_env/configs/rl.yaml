@@ -14,6 +14,7 @@ hydra:
   #   gpus_per_node: 1
   #   timeout_min: 2880
   #   mem_gb: 30
+    # account: pr_174_tandon_advanced
 
   job:
     # Prevent hydra from automatically changing the working directory of each experiment.

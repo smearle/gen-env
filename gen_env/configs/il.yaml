@@ -13,6 +13,7 @@ hydra:
     gpus_per_node: 1
     timeout_min: 2880
     mem_gb: 30
+    account: pr_174_tandon_advanced
 
   job:
     # Prevent hydra from automatically changing the working directory of each experiment.
@@ -20,11 +21,9 @@ hydra:
 
   sweeper:
     params:
-      load_gen: 5, 10, 15, 20
+      load_gen: 0, 5, 10
       # load_gen: 15
   
-
-env_exp_id: 14
 
 save_freq: 10_000
 eval_freq: 10_000

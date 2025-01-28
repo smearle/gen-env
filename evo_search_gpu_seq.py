@@ -458,7 +458,11 @@ def _main(cfg: EvoConfig):
 
         offspring_inds = []
         for o_params in offspring_params:
-            fitnesses, action_seqs = evaluate(key, env, o_params, render, trg_n_iter)
+            if not cfg.domain_randomize:
+                fitnesses, action_seqs = evaluate(key, env, o_params, render, trg_n_iter)
+            else:
+                fitnesses = jnp.zeros((1,))
+                action_seqs = jnp.zeros((1, cfg.max_episode_steps))
             o_ind = IndividualData(env_params=o_params, fitness=fitnesses, action_seq=action_seqs)
             offspring_inds.append(o_ind)
 
@@ -486,7 +490,11 @@ def _main(cfg: EvoConfig):
             #     print('skipping repeat env params')
             #     continue
             elites.add(o_hash)
-            fitnesses, action_seqs = evaluate(key, env, o_params, render, trg_n_iter)
+            if not cfg.domain_randomize:
+                fitnesses, action_seqs = evaluate(key, env, o_params, render, trg_n_iter)
+            else:
+                fitnesses = jnp.zeros((1,))
+                action_seqs = jnp.zeros((1, cfg.max_episode_steps))
             o_ind = IndividualData(env_params=o_params, fitness=fitnesses, action_seq=action_seqs)
             offspring_inds.append(o_ind)
 
@@ -540,7 +548,7 @@ def _main(cfg: EvoConfig):
 
 def eval_elites(cfg: EvoConfig, env: PlayEnv, elites: Iterable[IndividualData], n_gen: int, vid_dir: str,
                 overwrite=True):
-    """ Evaluate elites."""
+    """Render elite environment-solution pairs."""
     # Sort elites by fitness.
     elites = sorted(elites, key=lambda e: e.fitness[0], reverse=True)
     for e_idx, e in enumerate(elites[:10]):

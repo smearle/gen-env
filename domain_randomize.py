@@ -1,5 +1,6 @@
 from functools import partial
 import os
+from typing import Tuple
 import hydra
 import jax
 
@@ -49,7 +50,7 @@ def evaluate_solution(key, params, env) -> Tuple[float, float]:
 def main(cfg: EvoConfig):
     init_config(cfg)
     key = jax.random.PRNGKey(0)
-    save_dir = (os.path.join(cfg._log_dir_common, 'hypernet'))
+    save_dir = (os.path.join(cfg._log_dir_common, 'domain_randomlize'))
     archive_path = os.path.join(save_dir, 'archive.npz')
 
     # 1) Initialize environment
@@ -60,7 +61,6 @@ def main(cfg: EvoConfig):
     rand_params = jax.vmap(gen_rand_env_params, in_axes=(None, 0, None, None))(
         cfg, gen_key, base_params, game_def,
     )
-    breakpoint()
 
 if __name__ == '__main__':
     main()

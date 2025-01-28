@@ -21,6 +21,7 @@ from utils import stack_leaves
 
 def init_config(cfg: EvoConfig):
     env_exp_name = (f"{cfg.game}_{'mutRule_' if cfg.mutate_rules else ''}{'mutMap_' if cfg.mutate_map else ''}" + 
+                    ("domainRandomize_" if cfg.domain_randomize else '') +
         f's-{cfg.evo_seed}_' + f"exp-{cfg.env_exp_id}")
 
     # Get path to parent directory of this file

@@ -412,9 +412,9 @@ from orbax import checkpoint as ocp
 
 def save_checkpoint(ckpt_manager, train_state, t, rng):
     items = {'train_state': train_state, 'rng': rng}
-    save_args = flax.training.orbax_utils.save_args_from_target(items)
-    ckpt_manager.save(t, items=items, save_kwargs={'save_args': save_args})
-    # ckpt_manager.save(t, args=ocp.args.StandardSave(train_state))
+    # save_args = flax.training.orbax_utils.save_args_from_target(items)
+    # ckpt_manager.save(t, items=items, save_kwargs={'save_args': save_args})
+    ckpt_manager.save(t, args=ocp.args.StandardSave(items))
     ckpt_manager.wait_until_finished() 
 
 
@@ -442,13 +442,14 @@ def init_bc_agent(cfg: ILConfig, env: PlayEnv):
         max_to_keep=2, create=True)
     checkpoint_manager = ocp.CheckpointManager(
         cfg._il_ckpt_dir,
-        checkpointers=ocp.Checkpointer(ocp.PyTreeCheckpointHandler()), options=options)
+        options=options)
 
     if checkpoint_manager.latest_step() is not None:
         t = checkpoint_manager.latest_step()
         items = {'train_state': train_state, 'rng': rng}
         restore_args = flax.training.orbax_utils.save_args_from_target(items)
-        ckpt = checkpoint_manager.restore(t, items=items, restore_kwargs={'restore_args': restore_args})
+        # ckpt = checkpoint_manager.restore(t, items=items, restore_kwargs={'restore_args': restore_args})
+        ckpt = checkpoint_manager.restore(t, args=ocp.args.StandardRestore(items))
         train_state, rng = ckpt['train_state'], ckpt['rng']
         # train_state = checkpoint_manager.restore(t, args=ocp.args.StandardRestore(agent.train_state))
         checkpoint_manager.wait_until_finished()

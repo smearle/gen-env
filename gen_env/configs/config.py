@@ -10,6 +10,7 @@ from omegaconf import DictConfig
 class EvoConfig:
     evo_seed: int = 0
     seed: int = 0
+    domain_randomize: bool = False
     # map_width: int = 16
     map_shape: tuple = (16, 16)
     max_episode_steps: int = 100
@@ -116,7 +117,7 @@ class RLConfig(ILConfig):
     n_evo_gens: int = 1
     evo_save_freq: int = 10
     val_freq: int = 10
-    n_envs: int = 100
+    n_envs: int = 1_000
     evo_pop_size: int = 10
     evo_mutate_prob: float = 0.1
     blank_env_start: bool = False
@@ -208,7 +209,7 @@ class ProfileEnvConfig(RLConfig):
 @dataclass
 class SweepConfig():
     algo: str = 'il'  # il, rl
-    name: str = 'obs_win'
+    name: str = 'load_gen'
     mode: str = 'train'  # train, eval, plot, cross_eval
     slurm: bool = True
     skip_failures: bool = False
