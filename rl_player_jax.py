@@ -593,13 +593,13 @@ def _main(cfg: RLConfig):
             val_env_params = get_rand_train_envs(env_params, cfg.n_val_envs, rng, replace=True)
             
     else:
-        train_elites, val_elites, test_elites = load_elite_envs(cfg, latest_evo_gen)
+        train_elites, val_elites = load_elite_envs(cfg._log_dir_common, latest_evo_gen)
 
         # train_env_params = jax.tree.map(lambda x: x[:cfg.n_envs], train_elites.env_params)
-        val_env_params = val_elites.env_params
         train_env_params = train_elites.env_params
+        val_env_params = val_elites.env_params
 
-        del train_elites, val_elites, test_elites
+        del train_elites, val_elites
 
     if cfg.n_train_envs != -1:
         train_env_params = jax.tree.map(lambda x: x[-cfg.n_train_envs:], train_env_params)
@@ -612,7 +612,7 @@ def _main(cfg: RLConfig):
     if checkpoint_manager.latest_step() is None:
         restored_ckpt = None
         progress_csv_path = os.path.join(cfg._log_dir_rl, "progress.csv")
-        assert not os.path.exists(progress_csv_path), "Progress csv already exists, but have no checkpoint to restore " +\
+        assert not os.path.exists(progress_csv_path), f"Progress csv already exists at {progress_csv_path}, but have no checkpoint to restore " +\
             "from. Run with `overwrite=True` to delete the progress csv."
         # Create csv for logging progress
         with open(os.path.join(cfg._log_dir_rl, "progress.csv"), "w") as f:

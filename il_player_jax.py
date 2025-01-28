@@ -492,7 +492,7 @@ def _main(cfg: ILConfig):
 
 
     # Load the transitions from the training set
-    train_elites, val_elites, test_elites = load_elite_envs(cfg, latest_gen)
+    train_elites, val_elites = load_elite_envs(cfg._log_dir_common, latest_gen)
 
     # Initialize tensorboard logger
     summary_writer = SummaryWriter(
@@ -522,7 +522,7 @@ def _main(cfg: ILConfig):
         # print(f"pct. {n} correct: {pct_correct}")
 
 
-    _datasets = (train_elites, val_elites, test_elites)
+    _datasets = (train_elites, val_elites)
     datasets = []
     for d in _datasets:
         d = AutoverseILDataset(dataset=ILDataset(
@@ -536,7 +536,7 @@ def _main(cfg: ILConfig):
         obs_win=cfg.obs_window,
     )
         datasets.append(d)
-    train_dataset, val_dataset, test_dataset = datasets
+    train_dataset, val_dataset = datasets
 
     video_save_folder = None if cfg.render_freq == -1 else os.path.join(
         cfg._log_dir_il, 'video', 'eval')

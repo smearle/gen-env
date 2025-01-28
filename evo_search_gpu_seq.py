@@ -33,7 +33,7 @@ from gen_env.evo.individual import Individual, IndividualData, IndividualPlaytra
 from gen_env.rules import compile_rule
 from gen_env.utils import gen_rand_env_params, init_base_env, init_config
 from gen_env.evo.individual import Individual, IndividualData, hash_individual, hash_env
-from utils import concatenate_leaves, load_elite_envs, pad_frames, stack_leaves
+from utils import concatenate_leaves, pad_frames, stack_leaves
 
 
 
@@ -69,7 +69,7 @@ def collect_elites(cfg: EvoConfig, max_episode_steps: int):
         for elite in elites_i:
             elite: IndividualData
             n_evaluated += 1
-            e_hash = hash_individual(elite)
+            e_hash = hash_env(elite.env_params)
             if elite.fitness[0].item() < 2:
                 n_filtered += 1
                 continue
@@ -117,6 +117,7 @@ def collect_elites(cfg: EvoConfig, max_episode_steps: int):
     )
     _, playtraces = jax.vmap(_replay_episode, in_axes=(0))(elites_v)
 
+
     # for e_idx, elite in enumerate(elites):
     # #     # assert elite.map[4].sum() == 0, "Extra force tile!" # Specific to maze tiles only
     #     playtrace, frames = replay_episode_jax(cfg, env, elite, record=False, best_i=0)
@@ -144,16 +145,21 @@ def collect_elites(cfg: EvoConfig, max_episode_steps: int):
     if not os.path.isdir(cfg._log_dir_player_common):
         os.mkdir(cfg._log_dir_player_common)
 
-    train_elites, val_elites, test_elites = split_elites(cfg, playtraces)
+    playtraces = playtraces.replace(
+        env_params=playtraces.env_params.replace(
+            rew_scale=1/playtraces.rew_seq.sum(1), rew_bias=jnp.zeros((n_elites,))
+        )
+    )
 
-    train_elites, val_elites, test_elites = compute_noop_rewards(cfg, train_elites, val_elites, test_elites)
+    train_elites, val_elites = split_elites(cfg, playtraces)
+    print(f"Saving collected elites in {cfg._log_dir_common}")
+
+    # new_elite_sets= compute_noop_rewards(cfg, train_elites, val_elites, test_elites)
     # Save elite files under names above
     with open(os.path.join(cfg._log_dir_common, f"gen-{load_gen}_filtered_train_elites.pkl"), 'wb') as f:
         pickle.dump(train_elites, f)
     with open(os.path.join(cfg._log_dir_common, f"gen-{load_gen}_filtered_val_elites.pkl"), 'wb') as f:
         pickle.dump(val_elites, f)
-    with open(os.path.join(cfg._log_dir_common, f"gen-{load_gen}_filtered_test_elites.pkl"), 'wb') as f:
-        pickle.dump(test_elites, f)
     
     # Save elites to file
     # np.savez(os.path.join(cfg._log_dir_common, f'gen-{latest_gen}_train_elites.npz'), train_elites)
@@ -204,24 +210,24 @@ def split_elites(cfg: EvoConfig, playtraces: Playtrace):
     #     else:
     #         train_elites.append(playtraces[i])
     val_idxs = jnp.arange(0, n_elites, 10)
-    test_idxs = jnp.arange(9, n_elites, 10)
+    # test_idxs = jnp.arange(9, n_elites, 10)
     # train_idxs = jnp.array([i for i in range(n_elites) if i not in val_idxs and i not in test_idxs])
     # More efficient:
-    train_idxs = jnp.setdiff1d(jnp.arange(n_elites), jnp.concatenate([val_idxs, test_idxs])) 
+    train_idxs = jnp.setdiff1d(jnp.arange(n_elites), jnp.concatenate([val_idxs])) 
     
     val_elites = jax.tree.map(lambda x: x[val_idxs], playtraces)
-    test_elites = jax.tree.map(lambda x: x[test_idxs], playtraces)
+    # test_elites = jax.tree.map(lambda x: x[test_idxs], playtraces)
     train_elites = jax.tree.map(lambda x: x[train_idxs], playtraces)
 
     n_train = len(train_idxs)
     n_val = len(val_idxs)
-    n_test = len(test_idxs)
+    # n_test = len(test_idxs)
 
     # train_elites = elites[:n_train]
     # val_elites = elites[n_train:n_train+n_val]
     # test_elites = elites[n_train+n_val:]
-    print(f"Split {n_elites} elites into {n_train} train, {n_val} val, {n_test} test.")
-    return train_elites, val_elites, test_elites
+    print(f"Split {n_elites} elites into {n_train} train, {n_val} val.")
+    return train_elites, val_elites
 
 
 def replay_episode_jax(cfg: EvoConfig, env: PlayEnv, elite: IndividualData, 

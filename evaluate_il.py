@@ -13,7 +13,7 @@ from gen_env.configs.config import ILConfig
 from gen_env.evo.individual import IndividualPlaytraceData
 from gen_env.utils import init_base_env, init_config
 from il_player_jax import init_bc_agent
-from utils import init_il_config, load_elite_envs
+from utils import init_il_config
 
 
 @hydra.main(config_path="gen_env/configs", config_name="il")

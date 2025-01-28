@@ -242,6 +242,7 @@ def _main(cfg: RLConfig):
     init_config(cfg)
     latest_evo_gen = init_il_config(cfg)
     latest_il_update_step = init_rl_config(cfg, latest_evo_gen)
+    print(f"Logging RL results to: {cfg._log_dir_rl}")
 
     # Need to do this before setting up RL checkpoint manager so that it doesn't refer to old checkpoints.
     if cfg.overwrite and os.path.exists(cfg._log_dir_rl):
@@ -258,7 +259,7 @@ def _main(cfg: RLConfig):
 
     rng = jax.random.PRNGKey(cfg.seed)
 
-    train_elites, val_elites, test_elites = load_elite_envs(cfg, latest_evo_gen)
+    train_elites, val_elites = load_elite_envs(cfg._log_dir_common, latest_evo_gen)
 
     # train_env_params = jax.tree.map(lambda x: x[:cfg.n_envs], train_elites.env_params)
     val_env_params = val_elites.env_params
@@ -277,7 +278,7 @@ def _main(cfg: RLConfig):
     if cfg.n_val_envs != -1:
         val_env_params = jax.tree.map(lambda x: x[-cfg.n_val_envs:], val_env_params)
 
-    del train_elites, val_elites, test_elites
+    del train_elites, val_elites
 
     checkpoint_manager, runner_state, network, env, env_params = init_checkpointer(
         cfg, train_env_params=train_env_params, val_env_params=val_env_params

@@ -44,6 +44,9 @@ def plot_data(log_dir, keys, stepss, valuess):
         plt.xlabel('Step')
         plt.ylabel(f'{key}')
         plt.title(f'{key}')
+        print(key)
+        if key == 'rl/ep_return':
+            plt.ylim(bottom=-1)
         plt.legend()
         plt.grid(True)
         key = key.replace('/', '_')

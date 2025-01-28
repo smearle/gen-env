@@ -11,11 +11,7 @@ from gen_env.configs.config import EnjoyConfig
 # from envs.pcgrl_env import PCGRLEnv, render_stats
 from gen_env.envs.play_env import GenEnvParams, GenEnvState, PlayEnv
 from gen_env.evo.individual import IndividualPlaytraceData
-from gen_env.utils import init_base_env, pad_frames
-from rl_player_jax import RunnerState, init_checkpointer
-from pcgrl_utils import get_network
-from gen_env.utils import init_config
-from utils import init_il_config, init_rl_config, load_elite_envs
+from gen_env.utils import pad_frames
 
 
 # @hydra.main(version_base=None, config_path='gen_env/configs/', config_name='enjoy_xlife')

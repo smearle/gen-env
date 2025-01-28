@@ -39,8 +39,8 @@ class HyperParamsIL:
 
 @dataclass
 class HyperParamsRL:
-    # rl_seed: int = (0, 1, 2)
-    rl_seed: int = (3, 4, 5)
+    rl_seed: int = (0, 1, 2)
+    # rl_seed: int = (3, 4, 5)
     # load_gen: Tuple[int] = (5, 10, 50, 100, 136)
     load_gen: Tuple[int] = (100,)
     # load_il: Tuple[bool] = (True, False)
@@ -52,7 +52,7 @@ class HyperParamsRL:
     n_train_envs: Tuple[int] = (-1,)
     # obs_window: Tuple[int] = (5, 10, 20, -1)
     obs_window: Tuple[int] = (-1,)
-    obs_rew_norm: Tuple[bool] = (False,)
+    obs_rew_norm: Tuple[bool] = (True,)
     hide_rules: Tuple[bool] = (False,)
     total_timesteps: int = (100_000_000,)
 
@@ -90,8 +90,13 @@ rl_sweeps = {
         total_timesteps=(1e9,),
     ),
     'n_envs': HyperParamsRL(
-        load_gen=(0,),
-        n_train_envs=(1, 10, 50, 100, -1),
+        n_train_envs=(1, 10, 50, 100),
+        total_timesteps=(1e9,)
+    ),
+    'load_gen': HyperParamsRL(
+        # load_gen=(0, 5, 10),
+        load_gen=(2, 4, 6, 8, 12, 14, 16, 18),
+        n_train_envs=(-1,),
         total_timesteps=(1e9,)
     ),
 }
@@ -188,7 +193,6 @@ def main(cfg: SweepConfig):
                     main_fn(s_cfg)
                 except Exception as e:
                     print(f"Failed with {e}.")
-                    breakpoint()
             else:
                 main_fn(s_cfg)
 

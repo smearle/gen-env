@@ -20,7 +20,7 @@ class EvoConfig:
     evo_pop_size: int = 40
     game: str = "blank_for_evo"
     mutate_rules: bool = True
-    mutate_map: bool = False
+    mutate_map: bool = True
     evaluate: bool = False
     eval_freq: int = -1
     save_freq: int = 1
@@ -184,7 +184,7 @@ class EnjoyConfig(RLConfig):
 @dataclass
 class MapElitesConfig(EvoConfig):
     n_initial: int = 10
-    n_gen: int = 100
+    n_gen: int = 1_000
     bins: int = 100
     metric: str = "lz"
     mutate_map: bool = True

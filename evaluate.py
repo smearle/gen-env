@@ -1,6 +1,7 @@
 from functools import partial
 import json
 import os
+import pickle
 
 import jax
 import numpy as np
@@ -58,7 +59,7 @@ def render_elite_nn(env_params, env, apply_fn, network_params, n_eps=100):
     return states
 
     
-def eval_nn(env_params, env, apply_fn, network_params, n_eps=100):
+def eval_env_nn(env_params, env, apply_fn, network_params, n_eps=100):
     rng = jax.random.PRNGKey(0)  # we can get away with this here
     _step_env_nn = partial(step_env_nn, env=env, network_params=network_params, apply_fn=apply_fn, env_params=env_params)
     obs, state = env.reset(rng, env_params) 
@@ -88,12 +89,21 @@ def eval_random(params, env, n_eps=100):
 
 
 def eval_nn(cfg: ILConfig, latest_gen: int, env, apply_fn, network_params, algo):
-    _eval_elite_nn = partial(eval_nn, env=env, apply_fn=apply_fn, network_params={'params': network_params})
+    _eval_elite_nn = partial(eval_env_nn, env=env, apply_fn=apply_fn, network_params={'params': network_params})
 
     log_dir = getattr(cfg, f'_log_dir_{algo}')
 
     # Load the transitions from the training set
-    train_elites, val_elites, test_elites = load_elite_envs(cfg, latest_gen)
+    train_elites, val_elites = load_elite_envs(cfg._log_dir_common, latest_gen)
+    test_elites_path = os.path.join('saves', 'test_envs', 'test_envs.pkl')
+    with open(test_elites_path, 'rb') as f:
+        test_elites = pickle.load(f)
+        # HACK
+        test_elites = test_elites.replace(
+            env_params=test_elites.env_params.replace(
+                env_idx=test_elites.env_params.env_idx.squeeze(1),
+                rew_scale=test_elites.env_params.rew_scale.squeeze(1),
+                rew_bias=test_elites.env_params.rew_bias.squeeze(1)))
 
     e_stats = {}
     for name, e in zip(['train', 'val', 'test'], [train_elites, val_elites, test_elites]):
@@ -119,7 +129,7 @@ def render_nn(cfg: ILConfig, latest_gen: int, env, apply_fn, network_params, alg
     log_dir = getattr(cfg, f'_log_dir_{algo}')
 
     # Load the transitions from the training set
-    train_elites, val_elites, test_elites = load_elite_envs(cfg, latest_gen)
+    train_elites, val_elites = load_elite_envs(cfg._log_dir_common, latest_gen)
 
     e_stats = {}
     for name, e in zip(['train', 'val', 'test'], [train_elites, val_elites, test_elites]):

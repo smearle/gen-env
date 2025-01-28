@@ -6,16 +6,13 @@ defaults:
   # - override hydra/launcher: submitit_local
   - override hydra/launcher: submitit_slurm
 
-
-mutate_map: false
-
 hydra:
   launcher:
     tasks_per_node: 1
     cpus_per_task: 1
-    gpus_per_node: 1
+    gpus_per_node: 0
     timeout_min: 2880
-    mem_gb: 30
+    mem_gb: 80
     account: pr_174_tandon_advanced
 
   sweeper:

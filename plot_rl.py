@@ -35,6 +35,7 @@ def main(cfg: RLConfig):
 
     # Load and plot the data
     stepss, valss = load_tensorboard_logs(cfg._log_dir_rl, keys)
+    print(f"Loading tb logs at {cfg._log_dir_rl}")
     plot_data(cfg._log_dir_rl, keys, stepss, valss)
 
     # progress_csv = os.path.join(cfg._log_dir_rl, 'progress.csv')

@@ -59,8 +59,7 @@ def concatenate_leaves(trees):
     # Rebuild PyTree
     return jax.tree.unflatten(treedefs[0], concatenated_leaves)
 
-
-def load_elite_envs(cfg, latest_gen) -> Tuple[IndividualPlaytraceData]:
+def load_elite_envs(dir, latest_gen) -> Tuple[IndividualPlaytraceData]:
     # elites = np.load(os.path.join(cfg.log_dir_evo, "unique_elites.npz"), allow_pickle=True)['arr_0']
     # train_elites = np.load(os.path.join(cfg._log_dir_common, f"gen-{latest_gen}_train_elites.npz"), allow_pickle=True)['arr_0']
     # val_elites = np.load(os.path.join(cfg._log_dir_common, f"gen-{latest_gen}_val_elites.npz"), allow_pickle=True)['arr_0']
@@ -68,18 +67,18 @@ def load_elite_envs(cfg, latest_gen) -> Tuple[IndividualPlaytraceData]:
     # load with pickle instead
     import pickle
     # with open(os.path.join(cfg._log_dir_common, f"gen-{latest_gen}_train_elites.pkl"), 'rb') as f:
-    with open(os.path.join(cfg._log_dir_common, f"gen-{latest_gen}_filtered_train_elites.pkl"), 'rb') as f:
+    with open(os.path.join(dir, f"gen-{latest_gen}_filtered_train_elites.pkl"), 'rb') as f:
         train_elites = pickle.load(f)
     # with open(os.path.join(cfg._log_dir_common, f"gen-{latest_gen}_val_elites.pkl"), 'rb') as f:
-    with open(os.path.join(cfg._log_dir_common, f"gen-{latest_gen}_filtered_val_elites.pkl"), 'rb') as f:
+    with open(os.path.join(dir, f"gen-{latest_gen}_filtered_val_elites.pkl"), 'rb') as f:
         val_elites = pickle.load(f)
     # with open(os.path.join(cfg._log_dir_common, f"gen-{latest_gen}_test_elites.pkl"), 'rb') as f:
-    with open(os.path.join(cfg._log_dir_common, f"gen-{latest_gen}_filtered_test_elites.pkl"), 'rb') as f:
-        test_elites = pickle.load(f)
+    # with open(os.path.join(cfg._log_dir_common, f"gen-{latest_gen}_filtered_test_elites.pkl"), 'rb') as f:
+    #     test_elites = pickle.load(f)
     
     # Assign unique ids to each elite
     elites = []
-    for e in [train_elites, val_elites, test_elites]:
+    for e in [train_elites, val_elites]:
         e: IndividualPlaytraceData
         n_elites = e.env_params.rule_dones.shape[0]
         old_env_params_dict = e.env_params.__dict__
