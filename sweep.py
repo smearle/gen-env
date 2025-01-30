@@ -19,6 +19,13 @@ from plot_rl import main as plot_rl
 
 
 @dataclass
+class HyperParamsEvo:
+    evo_seed: Tuple[int] = (0, 1, 2, 3, 4)
+    mutate_rules: bool = (True,)
+    mutate_map: bool = (True,)
+    domain_randomize: bool = (True,False)
+
+@dataclass
 class HyperParamsIL:
     il_seed: Tuple[int] = (0, 1, 2,)
     load_gen: Tuple[int] = (100,)
@@ -55,14 +62,9 @@ class HyperParamsRL:
     obs_window: Tuple[int] = (-1,)
     obs_rew_norm: Tuple[bool] = (True,)
     hide_rules: Tuple[bool] = (False,)
-    total_timesteps: int = (100_000_000,)
-
-@dataclass
-class HyperParamsEvo:
-    evo_seed: Tuple[int] = (0, 1, 2, 3, 4)
-    mutate_rules: bool = (True,)
-    mutate_map: bool = (True,)
-    domain_randomize: bool = (True,False)
+    total_timesteps: int = (5e8,)
+    domain_randomize: bool = (False,)
+    n_envs: Tuple[int] = (300,)
 
 evo_sweeps = {
     'default': HyperParamsEvo(),
@@ -83,7 +85,7 @@ il_sweeps = {
         n_train_envs=(1, 10, 50, 100, -1),
     ),
     'load_gen': HyperParamsIL(
-        load_gen=(0, 5, 10),
+        load_gen=(0, 10, 20),
         # load_gen=(2, 4, 6, 8, 12, 14, 16, 18),
         n_train_envs=(-1,),
     ),
@@ -97,29 +99,57 @@ rl_sweeps = {
     'hide_rules': HyperParamsRL(
         hide_rules=(True, False),
     ),
-    'load_il': HyperParamsRL(
-        load_il=(True, False),
-    ),
-    'evo': HyperParamsRL(
-        # evo_freq=(-1, 1, 10),
-        evo_freq=(1, 10),
-        n_evo_gens=(1, 5, 10),
-        total_timesteps=(1e9,),
-    ),
     'n_envs': HyperParamsRL(
         n_train_envs=(1, 10, 50, 100),
-        total_timesteps=(1e9,)
     ),
     'load_gen': HyperParamsRL(
-        # load_gen=(0, 5, 10),
-        load_gen=(0, 5, 10, 15),
+        # rl_seed=(0, 1, 2),
+        rl_seed=(3, 4, 5),
+        # load_gen=(20, 25),
+        load_gen=(0, 10, 20),
+        # load_gen=(2, 4, 6, 8, 12, 16, 18),
+        # load_gen=(0, 2, 4, 5, 6, 8, 10, 12, 16, 18),
+        # load_il=(True, False),
+        load_il=(False,),
         n_train_envs=(-1,),
-        total_timesteps=(1e9,)
+        n_envs=(300,)
+    ),
+    'load_il': HyperParamsRL(
+        rl_seed=(0, 1, 2),
+        # load_gen=(0, 5, 10),
+        load_gen=(10,),
+        load_il=(True,False,),
+        n_train_envs=(-1,),
+        n_envs=(1000,)
+    ),
+    'load_il_2': HyperParamsRL(
+        rl_seed=(3, 4, 5),
+        load_gen=(0, 10),
+        load_il=(True,False),
+        n_train_envs=(-1,),
+        n_envs=(300,)
+    ),
+    'evo': HyperParamsRL(
+        load_gen=(10,),
+        evo_freq=(-1, 1, 5, 10,),
+        n_envs=(1000,)
+    ),
+    'evo_2': HyperParamsRL(
+        rl_seed=(0, 1, 2),
+        load_gen=(10,),
+        evo_freq=(-1, 1, 5, 10,),
+        n_envs=(300,)
+    ),
+    'dr': HyperParamsRL(
+        rl_seed=(3, 4, 5),
+        load_gen=(0, 10, 20),
+        domain_randomize=(True,),
+        n_envs=(300,)
     ),
 }
 
 
-@hydra.main(config_path="gen_env/configs", config_name="sweep")
+@hydra.main(config_path="gen_env/configs", config_name="sweep", version_base="1.3")
 def main(cfg: SweepConfig):
     sweep_name = cfg.name
     if cfg.algo == 'il':
@@ -183,11 +213,13 @@ def main(cfg: SweepConfig):
             main_fn = plot_il
         elif cfg.algo == 'rl':
             main_fn = plot_rl
+
     elif cfg.mode == 'eval':
         if cfg.algo == 'il':
             main_fn = eval_il
         elif cfg.algo == 'rl':
             main_fn = eval_rl
+
     elif cfg.mode == 'render':
         if cfg.algo == 'il':
             main_fn = partial(eval_il, render=True)
@@ -200,14 +232,20 @@ def main(cfg: SweepConfig):
         if cfg.algo == 'evo':
             submitit_args = dict()
         else:
-            submitit_args = dict(slurm_gres='gpu:1')
+            submitit_args = dict(slurm_gres='gpu:1', 
+                                #  constraint="a100|h100"
+                                )
+        if cfg.mode == 'eval':
+            timeout_min = 60
+        else:
+            timeout_min=2880,
 
         executor.update_parameters(
                 slurm_job_name=f"{cfg.algo}_{cfg.mode}_{sweep_name}",
                 mem_gb=30,
                 tasks_per_node=1,
                 cpus_per_task=1,
-                timeout_min=2880,
+                timeout_min=timeout_min,
                 slurm_account='pr_174_tandon_advanced',
                 **submitit_args,
             )

@@ -8,7 +8,7 @@ import hydra
 import jax
 import numpy as np
 
-from evaluate import eval_nn
+from evaluate import eval_nn, render_nn
 from gen_env.configs.config import ILConfig, RLConfig
 from gen_env.evo.individual import IndividualPlaytraceData
 from gen_env.utils import init_base_env, init_config
@@ -18,9 +18,9 @@ from rl_player_jax import init_checkpointer, restore_checkpoint
 from utils import init_il_config, init_rl_config, load_elite_envs
 
 
-@hydra.main(config_path="gen_env/configs", config_name="rl")
+@hydra.main(config_path="gen_env/configs", config_name="rl", version_base="1.3")
 def main_eval_rl(cfg: RLConfig):
-    eval_cfg(cfg, render=False)
+    eval_rl(cfg, render=False)
 
 def eval_rl(cfg: RLConfig, render=False):
     init_config(cfg)
@@ -61,4 +61,4 @@ def eval_rl(cfg: RLConfig, render=False):
     
         
 if __name__ == '__main__':
-    eval_rl()
+    main_eval_rl()

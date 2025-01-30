@@ -97,7 +97,7 @@ class RLConfig(ILConfig):
     rl_exp_name: str = "0"
     lr: float = 1.0e-5
     num_steps: int = 200
-    total_timesteps: int = int(1e9)
+    total_timesteps: int = int(1e8)
     update_epochs: int = 10
     NUM_MINIBATCHES: int = 4
     GAMMA: float = 0.99
@@ -117,7 +117,7 @@ class RLConfig(ILConfig):
     n_evo_gens: int = 1
     evo_save_freq: int = 10
     val_freq: int = 10
-    n_envs: int = 1_000
+    n_envs: int = 300
     evo_pop_size: int = 10
     evo_mutate_prob: float = 0.1
     blank_env_start: bool = False

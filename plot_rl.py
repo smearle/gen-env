@@ -27,7 +27,7 @@ def main(cfg: RLConfig):
         'rl/ep_return_max',
         'rl/ep_return_min',
         'rl/ep_length',
-        'rl/fps',
+        # 'rl/fps',
         # 'rl/eval/ep_return',
         # 'rl/eval/ep_return_max',
         # 'rl/eval/ep_return_min',

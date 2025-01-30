@@ -1,6 +1,7 @@
 from functools import partial
 import json
 import os
+from pathlib import Path
 import pickle
 
 import jax
@@ -95,7 +96,7 @@ def eval_nn(cfg: ILConfig, latest_gen: int, env, apply_fn, network_params, algo)
 
     # Load the transitions from the training set
     train_elites, val_elites = load_elite_envs(cfg._log_dir_common, latest_gen)
-    test_elites_path = os.path.join('saves', 'test_envs', 'test_envs.pkl')
+    test_elites_path = os.path.join(Path(cfg._log_dir_common).parent, 'test_envs', 'test_envs.pkl')
     with open(test_elites_path, 'rb') as f:
         test_elites = pickle.load(f)
         # HACK

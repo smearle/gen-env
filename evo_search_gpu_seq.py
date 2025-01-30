@@ -70,7 +70,12 @@ def collect_elites(cfg: EvoConfig, max_episode_steps: int):
             elite: IndividualData
             n_evaluated += 1
             e_hash = hash_env(elite.env_params)
-            if elite.fitness[0].item() < 2:
+
+            # HACK to fix wrong type of dummy actions during domain randomization
+            if cfg.domain_randomize:
+                elite = elite.replace(action_seq=elite.action_seq.astype(int))
+
+            if elite.fitness[0].item() < 2 and not cfg.domain_randomize:
                 n_filtered += 1
                 continue
             if e_hash not in elites or elites[e_hash].fitness.item() < elite.fitness[0].item():

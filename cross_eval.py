@@ -4,6 +4,7 @@ import glob
 from itertools import product
 import json
 import os
+from pathlib import Path
 from typing import Iterable
 
 from gen_env.configs.config import EvoConfig, ILConfig, SweepConfig
@@ -28,12 +29,7 @@ CROSS_EVAL_DIR = 'cross_eval'
 METRIC_COL_TPL_IDX = 0
 
 table_name_remaps = {
-    'min_min_ep_loss': 'min. loss',
-    'mean_min_ep_loss': 'mean loss',
-    'max_board_scans': 'max. board scans',
-    'eval_randomize_map_shape': 'rand. map shape',
-    'randomize_map_shape': 'rand. map shape',
-    'eval map width': 'map width',
+    'val_mean': 'val. mean'
 }
 
 
@@ -192,12 +188,14 @@ def cross_eval_basic(name: str, sweep_configs: Iterable[SweepConfig], hypers, ev
         for sec in sweep_eval_configs:
             sec_col_tpl = [getattr(sec, k) for k in eval_hyper_ks]
             sc_log_dir = getattr(sc, log_dir_attr)
-            sc_stats = json.load(open(
-                os.path.join(f'{sc_log_dir}', 
-                            'nn_stats.json')))
+            sc_stats_path = os.path.join(f'{sc_log_dir}', 
+                            'nn_stats.json')
+            if not os.path.isfile(sc_stats_path):
+                continue
+            sc_stats = json.load(open(sc_stats_path))
             # HACK to combine val and test sets
             test_returns = sc_stats['val_returns'] + sc_stats['test_returns']
-            sc_stats.pop('val_mean')
+            # sc_stats.pop('val_mean')
             sc_stats['test_mean'] = np.mean(test_returns)
             # END HACK
 
@@ -315,6 +313,7 @@ def cross_eval_basic(name: str, sweep_configs: Iterable[SweepConfig], hypers, ev
     
     # Drop these columns
     basic_stats_concise_df = basic_stats_concise_df.droplevel(col_levels_to_drop, axis=1)
+    basic_stats_concise_df = basic_stats_concise_df[['train_mean', 'val_mean', 'test_mean']]
 
     # Drop the `n_parameters` `n_eval_eps` metrics, and others if `metrics_to_keep` is specified
     for col_tpl in basic_stats_concise_df.columns:
@@ -374,7 +373,6 @@ def cross_eval_misc(name: str, sweep_configs: Iterable[SweepConfig], hypers, alg
     dummy_cfg = sweep_configs[0]
     csv_paths = glob.glob(os.path.join(getattr(dummy_cfg, log_dir_attr), '*.csv'))
     key_names = [csv_path.split(os.sep)[-1].removesuffix('.csv') for csv_path in csv_paths]
-    breakpoint()
     # csv_paths = glob.glob(os.path.join(getattr(dummy_cfg, log_dir_attr), '*.csv'))
     # key_names = [csv_path.split(os.sep)[-1].removesuffix('.csv') for csv_path in csv_paths]
 
@@ -496,7 +494,7 @@ def cross_eval_misc(name: str, sweep_configs: Iterable[SweepConfig], hypers, alg
         ax.set_xlabel('Steps')
         ax.set_ylabel(key_name)
         # ax.legend()
-        plt.savefig(os.path.join(CROSS_EVAL_DIR, name, f"{key_name}.png"))
+        plt.savefig(os.path.join(CROSS_EVAL_DIR, name, f"{key_name.replace('/','_')}.png"))
 
         fig, ax = plt.subplots()
         # cut off the first and last 100 timesteps to remove outliers
@@ -512,7 +510,7 @@ def cross_eval_misc(name: str, sweep_configs: Iterable[SweepConfig], hypers, alg
             # Apply a convolution to smooth the curve
             # row = np.convolve(row, np.ones(10), 'same') / 10
             # row = row[100:-100]
-            # row = np.convolve(row, np.ones(10), 'valid') / 10
+            # row = np.convolve(row, np.ones(10), 'same') / 10
             # turn it back into a pandas series
             row = pd.Series(row, index=columns)
             
@@ -535,11 +533,13 @@ def cross_eval_misc(name: str, sweep_configs: Iterable[SweepConfig], hypers, alg
 
         # Can manually set these bounds to tweak the visualization
         # ax.set_ylim(ymin, 1.1 * np.nanmax(metric_curves_mean))
+        # ax.set_ylim(bottom=-10, top=2)
+        # ax.set_xlim(right=200_000_000)
 
         legend_title = ', '.join(levels_to_keep).replace('_', ' ')
         ax.legend(title=legend_title)
         fig_path = os.path.join(CROSS_EVAL_DIR, name, f"{key_name}_metric_curves_mean.png")
-        os.makedirs(os.path.pardir(fig_path), exist_ok=True)
+        os.makedirs(Path(fig_path).parent, exist_ok=True)
         plt.savefig(fig_path)
         print(f"Saved plot to {os.path.join(CROSS_EVAL_DIR, name, fig_path)}")
 

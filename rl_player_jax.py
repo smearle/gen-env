@@ -473,7 +473,7 @@ def make_train(cfg: RLConfig, init_runner_state: RunnerState, il_params, checkpo
 
 def init_checkpointer(config: RLConfig, train_env_params: GenEnvParams, val_env_params: GenEnvParams):
     # This will not affect training, just for initializing dummy env etc. to load checkpoint.
-    rng = jax.random.PRNGKey(30)
+    rng = jax.random.PRNGKey(config.rl_seed)
     # Set up checkpointing
     ckpt_dir = get_rl_ckpt_dir(config)
     # Get absolute path
@@ -541,7 +541,7 @@ def restore_checkpoint(checkpoint_manager, runner_state, config):
     ckpt = checkpoint_manager.restore(steps_prev_complete, args=ocp.args.StandardRestore(items))
     runner_state = ckpt['runner_state']
     return runner_state
-    
+ 
 
 @hydra.main(version_base=None, config_path='gen_env/configs', config_name='rl')
 def main(cfg: RLConfig):
@@ -576,11 +576,11 @@ def _main(cfg: RLConfig):
     else:
         il_params = None
 
-    rng = jax.random.PRNGKey(cfg.seed)
+    rng = jax.random.PRNGKey(cfg.rl_seed)
 
 
     if cfg.load_gen is None:
-
+        print("You haven't specified a `load_gen`, generating random environments for training and validation.")
         if not cfg.load_game:
             # In this case, we generate random (probably garbage) environments upon which to begin training.
             train_env_params = jax.vmap(gen_rand_env_params, in_axes=(None, 0, None, None))(
